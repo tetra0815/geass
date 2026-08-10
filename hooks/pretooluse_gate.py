@@ -19,6 +19,7 @@ import sys
 
 GATED_SKILLS = {
     "speckit-git-feature",
+    "speckit-git-hotfix",
     "speckit-plan",
     "executing-plans",
     "subagent-driven-development",
@@ -78,6 +79,19 @@ def root_worktree_branch(repo_root: str):
     return None
 
 
+def git_flow_master_branch(repo_root: str) -> str:
+    """Return the configured git-flow master branch name, defaulting to
+    'main' if gitflow.branch.master is unset."""
+    result = subprocess.run(
+        ["git", "config", "gitflow.branch.master"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    branch = result.stdout.strip()
+    return branch if result.returncode == 0 and branch else "main"
+
+
 def main() -> int:
     data = json.load(sys.stdin)
     if data.get("tool_name") != "Skill":
@@ -99,6 +113,18 @@ def main() -> int:
                 f"（現在: {branch or '(detached)'}）。"
                 "/speckit-git-feature の前に、ルートworktreeで "
                 "`git flow release start <version>` を実行してください。"
+            )))
+        return 0
+
+    if skill == "speckit-git-hotfix":
+        branch = root_worktree_branch(repo_root)
+        master_branch = git_flow_master_branch(repo_root)
+        if branch != master_branch:
+            print(json.dumps(deny(
+                f"ルートworktreeが {master_branch} ブランチではありません"
+                f"（現在: {branch or '(detached)'}）。"
+                "/speckit-git-hotfix の前に、ルートworktreeで "
+                f"`git checkout {master_branch}` を実行してください。"
             )))
         return 0
 
