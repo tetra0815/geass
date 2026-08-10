@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PostToolUse companion to speckit_pretooluse_gate.py.
+"""PostToolUse companion to pretooluse_gate.py.
 
 speckit-analyze is STRICTLY READ-ONLY (writes no files), so it leaves no
 artifact the gate could check. This hook fires after every Skill call and,

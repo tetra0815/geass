@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for the speckit + superpowers pipeline (constitution.md
-'Development Workflow'). Blocks two Skill invocations that speckit itself
-does not enforce:
+"""PreToolUse gate for the geass worktree harness.
 
+Blocks Skill invocations that need a precondition speckit itself does not
+enforce:
+
+  - speckit-git-feature: root worktree must be on a <git-flow release
+    prefix>* branch (git config gitflow.prefix.release, default "release/").
+  - speckit-git-hotfix: root worktree must be on the git-flow master branch
+    (git config gitflow.branch.master, default "main").
   - speckit-plan: requires spec.md to already have a '## Clarifications'
-    section (i.e. speckit-clarify ran first).
+    section (i.e. speckit-clarify ran first). Optional -- controlled by
+    enforce_clarify_before_plan in .specify/init-options.json (default true).
   - superpowers:executing-plans / superpowers:subagent-driven-development:
     requires a speckit-analyze marker for the current feature (written by
-    speckit_posttooluse_analyze_marker.py).
+    posttooluse_analyze_marker.py). Optional -- controlled by
+    require_analyze_before_execute in .specify/init-options.json (default
+    true).
 
-A no-op outside a speckit feature context (check-prerequisites.sh fails),
-so it never blocks work unrelated to the speckit pipeline.
+The speckit-plan/executing-plans checks are a no-op outside a speckit feature
+context (check-prerequisites.sh fails), so they never block work unrelated to
+the speckit pipeline.
 """
 import json
 import os
@@ -36,14 +45,32 @@ def deny(reason: str) -> dict:
     }
 
 
+def read_init_option_bool(repo_root: str, key: str, default: bool) -> bool:
+    f = os.path.join(repo_root, ".specify", "init-options.json")
+    if not os.path.isfile(f):
+        return default
+    try:
+        with open(f, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        return default
+    val = data.get(key)
+    return val if isinstance(val, bool) else default
+
+
 def resolve_feature_paths(repo_root: str):
     prereq = os.path.join(repo_root, ".specify", "scripts", "bash", "check-prerequisites.sh")
-    result = subprocess.run(
-        [prereq, "--paths-only", "--json"],
-        capture_output=True,
-        text=True,
-        cwd=repo_root,
-    )
+    try:
+        result = subprocess.run(
+            [prereq, "--paths-only", "--json"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except OSError:
+        # check-prerequisites.sh doesn't exist (e.g. spec-kit isn't
+        # installed in this repo) -- nothing to gate.
+        return None
     if result.returncode != 0:
         return None
     try:
@@ -79,6 +106,17 @@ def root_worktree_branch(repo_root: str):
     return None
 
 
+def git_flow_release_prefix(repo_root: str) -> str:
+    result = subprocess.run(
+        ["git", "config", "gitflow.prefix.release"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    prefix = result.stdout.strip()
+    return prefix if result.returncode == 0 and prefix else "release/"
+
+
 def git_flow_master_branch(repo_root: str) -> str:
     """Return the configured git-flow master branch name, defaulting to
     'main' if gitflow.branch.master is unset."""
@@ -107,9 +145,10 @@ def main() -> int:
 
     if skill == "speckit-git-feature":
         branch = root_worktree_branch(repo_root)
-        if not branch or not branch.startswith("release/"):
+        prefix = git_flow_release_prefix(repo_root)
+        if not branch or not branch.startswith(prefix):
             print(json.dumps(deny(
-                "ルートworktreeが release/* ブランチではありません"
+                f"ルートworktreeが {prefix}* ブランチではありません"
                 f"（現在: {branch or '(detached)'}）。"
                 "/speckit-git-feature の前に、ルートworktreeで "
                 "`git flow release start <version>` を実行してください。"
@@ -130,11 +169,12 @@ def main() -> int:
 
     paths = resolve_feature_paths(repo_root)
     if paths is None:
-        # Not currently inside a speckit feature context (e.g. no
-        # .specify/feature.json yet) -- nothing to gate.
+        # Not currently inside a speckit feature context -- nothing to gate.
         return 0
 
     if skill == "speckit-plan":
+        if not read_init_option_bool(repo_root, "enforce_clarify_before_plan", True):
+            return 0
         spec = paths.get("FEATURE_SPEC", "")
         if not spec or not os.path.isfile(spec):
             print(json.dumps(deny(
@@ -146,11 +186,13 @@ def main() -> int:
         if "## Clarifications" not in content:
             print(json.dumps(deny(
                 "spec.md has no '## Clarifications' section yet. "
-                "Run speckit-clarify before speckit-plan (per constitution.md)."
+                "Run speckit-clarify before speckit-plan."
             )))
         return 0
 
     # executing-plans / subagent-driven-development
+    if not read_init_option_bool(repo_root, "require_analyze_before_execute", True):
+        return 0
     feature_dir = paths.get("FEATURE_DIR", "")
     if not feature_dir:
         return 0
@@ -158,7 +200,7 @@ def main() -> int:
     if not os.path.isfile(marker):
         print(json.dumps(deny(
             f"speckit-analyze has not been run for this feature yet. "
-            f"Run speckit-analyze before {skill} (per constitution.md)."
+            f"Run speckit-analyze before {skill}."
         )))
     return 0
 
