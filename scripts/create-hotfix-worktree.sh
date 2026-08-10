@@ -40,10 +40,7 @@ if [ -e "$WORKTREE_PATH" ]; then
     echo "Error: worktree path '$WORKTREE_PATH' already exists" >&2
     exit 1
 fi
-if ! command -v wezterm >/dev/null 2>&1; then
-    echo "Error: wezterm CLI not found; aborting before creating any branch or worktree" >&2
-    exit 1
-fi
+check_terminal_multiplexer "$REPO_ROOT" || exit 1
 
 # Branch from the root worktree's current HEAD. This does not touch the root
 # worktree's own checkout -- `git worktree add` only checks out the new branch
@@ -60,7 +57,7 @@ SETTINGSEOF
 
 PROMPT="Use the superpowers:systematic-debugging skill to investigate and fix this bug: $BUG_DESCRIPTION"
 
-wezterm cli spawn --cwd "$WORKTREE_PATH" -- claude "$PROMPT" >/dev/null
+spawn_claude_tab "$REPO_ROOT" "$WORKTREE_PATH" "$PROMPT"
 
 echo "BRANCH_NAME: $BRANCH_NAME"
 echo "WORKTREE_PATH: $WORKTREE_PATH"
