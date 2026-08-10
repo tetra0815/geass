@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """PostToolUse companion to pretooluse_gate.py.
 
-speckit-analyze is STRICTLY READ-ONLY (writes no files), so it leaves no
+analyze is STRICTLY READ-ONLY (writes no files), so it leaves no
 artifact the gate could check. This hook fires after every Skill call and,
-when the skill was speckit-analyze, writes a marker file for the current
+when the skill was analyze, writes a marker file for the current
 feature so the PreToolUse gate can confirm analyze ran before
 executing-plans / subagent-driven-development.
 """
@@ -17,20 +17,24 @@ def main() -> int:
     data = json.load(sys.stdin)
     if data.get("tool_name") != "Skill":
         return 0
-    if data.get("tool_input", {}).get("skill") != "speckit-analyze":
+    if data.get("tool_input", {}).get("skill") != "analyze":
         return 0
 
     repo_root = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
     ).stdout.strip() or os.getcwd()
 
-    prereq = os.path.join(repo_root, ".specify", "scripts", "bash", "check-prerequisites.sh")
-    result = subprocess.run(
-        [prereq, "--paths-only", "--json"],
-        capture_output=True,
-        text=True,
-        cwd=repo_root,
-    )
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+    prereq = os.path.join(plugin_root, "scripts", "bash", "check-prerequisites.sh")
+    try:
+        result = subprocess.run(
+            [prereq, "--paths-only", "--json"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except OSError:
+        return 0
     if result.returncode != 0:
         return 0
     try:
@@ -42,11 +46,11 @@ def main() -> int:
     if not feature_dir:
         return 0
 
-    state_dir = os.path.join(repo_root, ".specify", "state")
+    state_dir = os.path.join(repo_root, ".geass", "state")
     os.makedirs(state_dir, exist_ok=True)
     marker = os.path.join(state_dir, os.path.basename(feature_dir) + ".analyzed")
     with open(marker, "w", encoding="utf-8") as f:
-        f.write("speckit-analyze ran for this feature.\n")
+        f.write("analyze ran for this feature.\n")
     return 0
 
 

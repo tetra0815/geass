@@ -40,7 +40,7 @@ cat > "$WORKTREE_PATH/.claude/settings.local.json" <<SETTINGSEOF
 }
 SETTINGSEOF
 
-PROMPT="SPECIFY_FEATURE_DIRECTORY=$SPEC_DIR is already decided -- use it as-is, do not recompute the feature name. /speckit-specify $FEATURE_DESCRIPTION"
+PROMPT="SPECIFY_FEATURE_DIRECTORY=$SPEC_DIR is already decided -- use it as-is, do not recompute the feature name. /specify $FEATURE_DESCRIPTION"
 
 spawn_claude_tab "$REPO_ROOT" "$WORKTREE_PATH" "$PROMPT"
 

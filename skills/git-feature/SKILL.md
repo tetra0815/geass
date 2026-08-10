@@ -1,8 +1,8 @@
 ---
-name: "speckit-git-feature"
-description: "Create a dedicated branch and git worktree for a new feature, open it in a new WezTerm tab, and hand off spec creation to /speckit-specify there."
+name: "git-feature"
+description: "Create a dedicated branch and git worktree for a new feature, open it in a new WezTerm tab, and hand off spec creation to /specify there."
 argument-hint: "Describe the feature you want to specify"
-compatibility: "Requires spec-kit project structure with .specify/ directory, git flow, and WezTerm"
+compatibility: "Requires a .geass/ project directory, git flow, and WezTerm or tmux"
 metadata:
   author: "sommelier"
 user-invocable: true
@@ -21,15 +21,15 @@ You **MUST** consider the user input before proceeding. If it is empty: ERROR
 ## Precondition
 
 This command only runs while the root worktree is checked out on a `release/*`
-branch. That is enforced by `.claude/hooks/speckit_pretooluse_gate.py`, a
-PreToolUse hook on this Skill — if this command's instructions are running at
-all, the precondition already passed.
+branch. That is enforced by the geass plugin's own `hooks/pretooluse_gate.py`,
+a PreToolUse hook on this Skill — if this command's instructions are running
+at all, the precondition already passed.
 
 ## Outline
 
 1. Run, from the repository root:
    ```bash
-   .specify/scripts/bash/create-feature-worktree.sh "$ARGUMENTS"
+   "${CLAUDE_PLUGIN_ROOT}/scripts/create-feature-worktree.sh" "$ARGUMENTS"
    ```
 2. If the script exits non-zero: report its stderr output to the user verbatim
    and STOP. Do not retry automatically, do not create any files yourself.
@@ -41,7 +41,7 @@ all, the precondition already passed.
    - Written `WORKTREE_PATH/.claude/settings.local.json` pinning that worktree
      to the Sonnet model
    - Opened a new WezTerm tab, cd'd into `WORKTREE_PATH`, and launched `claude`
-     there with a prompt that runs `/speckit-specify` using
+     there with a prompt that runs `/specify` using
      `SPECIFY_FEATURE_DIRECTORY=SPEC_DIR` (already decided — the new session
      must not recompute the feature name)
 4. Report completion to the user with `BRANCH_NAME`, `WORKTREE_PATH`, and

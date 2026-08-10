@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """PreToolUse gate for the geass worktree harness.
 
-Blocks Skill invocations that need a precondition speckit itself does not
-enforce:
+Blocks Skill invocations that need a precondition geass itself does not
+otherwise enforce:
 
-  - speckit-git-feature: root worktree must be on a <git-flow release
+  - git-feature: root worktree must be on a <git-flow release
     prefix>* branch (git config gitflow.prefix.release, default "release/").
-  - speckit-git-hotfix: root worktree must be on the git-flow master branch
+  - git-hotfix: root worktree must be on the git-flow master branch
     (git config gitflow.branch.master, default "main").
-  - speckit-plan: requires spec.md to already have a '## Clarifications'
-    section (i.e. speckit-clarify ran first). Optional -- controlled by
-    enforce_clarify_before_plan in .specify/init-options.json (default true).
+  - plan: requires spec.md to already have a '## Clarifications'
+    section (i.e. clarify ran first). Optional -- controlled by
+    enforce_clarify_before_plan in .geass/init-options.json (default true).
   - superpowers:executing-plans / superpowers:subagent-driven-development:
-    requires a speckit-analyze marker for the current feature (written by
+    requires an analyze marker for the current feature (written by
     posttooluse_analyze_marker.py). Optional -- controlled by
-    require_analyze_before_execute in .specify/init-options.json (default
+    require_analyze_before_execute in .geass/init-options.json (default
     true).
 
-The speckit-plan/executing-plans checks are a no-op outside a speckit feature
+The plan/executing-plans checks are a no-op outside a geass feature
 context (check-prerequisites.sh fails), so they never block work unrelated to
-the speckit pipeline.
+the geass spec pipeline.
 """
 import json
 import os
@@ -27,9 +27,9 @@ import subprocess
 import sys
 
 GATED_SKILLS = {
-    "speckit-git-feature",
-    "speckit-git-hotfix",
-    "speckit-plan",
+    "git-feature",
+    "git-hotfix",
+    "plan",
     "executing-plans",
     "subagent-driven-development",
 }
@@ -46,7 +46,7 @@ def deny(reason: str) -> dict:
 
 
 def read_init_option_bool(repo_root: str, key: str, default: bool) -> bool:
-    f = os.path.join(repo_root, ".specify", "init-options.json")
+    f = os.path.join(repo_root, ".geass", "init-options.json")
     if not os.path.isfile(f):
         return default
     try:
@@ -59,7 +59,8 @@ def read_init_option_bool(repo_root: str, key: str, default: bool) -> bool:
 
 
 def resolve_feature_paths(repo_root: str):
-    prereq = os.path.join(repo_root, ".specify", "scripts", "bash", "check-prerequisites.sh")
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+    prereq = os.path.join(plugin_root, "scripts", "bash", "check-prerequisites.sh")
     try:
         result = subprocess.run(
             [prereq, "--paths-only", "--json"],
@@ -68,8 +69,9 @@ def resolve_feature_paths(repo_root: str):
             cwd=repo_root,
         )
     except OSError:
-        # check-prerequisites.sh doesn't exist (e.g. spec-kit isn't
-        # installed in this repo) -- nothing to gate.
+        # check-prerequisites.sh isn't resolvable (e.g. CLAUDE_PLUGIN_ROOT is
+        # unset, or this repo has no .geass/ feature context yet) -- nothing
+        # to gate.
         return None
     if result.returncode != 0:
         return None
@@ -143,42 +145,42 @@ def main() -> int:
         ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
     ).stdout.strip() or os.getcwd()
 
-    if skill == "speckit-git-feature":
+    if skill == "git-feature":
         branch = root_worktree_branch(repo_root)
         prefix = git_flow_release_prefix(repo_root)
         if not branch or not branch.startswith(prefix):
             print(json.dumps(deny(
                 f"ルートworktreeが {prefix}* ブランチではありません"
                 f"（現在: {branch or '(detached)'}）。"
-                "/speckit-git-feature の前に、ルートworktreeで "
+                "/git-feature の前に、ルートworktreeで "
                 "`git flow release start <version>` を実行してください。"
             )))
         return 0
 
-    if skill == "speckit-git-hotfix":
+    if skill == "git-hotfix":
         branch = root_worktree_branch(repo_root)
         master_branch = git_flow_master_branch(repo_root)
         if branch != master_branch:
             print(json.dumps(deny(
                 f"ルートworktreeが {master_branch} ブランチではありません"
                 f"（現在: {branch or '(detached)'}）。"
-                "/speckit-git-hotfix の前に、ルートworktreeで "
+                "/git-hotfix の前に、ルートworktreeで "
                 f"`git checkout {master_branch}` を実行してください。"
             )))
         return 0
 
     paths = resolve_feature_paths(repo_root)
     if paths is None:
-        # Not currently inside a speckit feature context -- nothing to gate.
+        # Not currently inside a geass feature context -- nothing to gate.
         return 0
 
-    if skill == "speckit-plan":
+    if skill == "plan":
         if not read_init_option_bool(repo_root, "enforce_clarify_before_plan", True):
             return 0
         spec = paths.get("FEATURE_SPEC", "")
         if not spec or not os.path.isfile(spec):
             print(json.dumps(deny(
-                "spec.md not found for the current feature. Run speckit-specify first."
+                "spec.md not found for the current feature. Run /specify first."
             )))
             return 0
         with open(spec, "r", encoding="utf-8", errors="ignore") as f:
@@ -186,7 +188,7 @@ def main() -> int:
         if "## Clarifications" not in content:
             print(json.dumps(deny(
                 "spec.md has no '## Clarifications' section yet. "
-                "Run speckit-clarify before speckit-plan."
+                "Run /clarify before /plan."
             )))
         return 0
 
@@ -196,11 +198,11 @@ def main() -> int:
     feature_dir = paths.get("FEATURE_DIR", "")
     if not feature_dir:
         return 0
-    marker = os.path.join(repo_root, ".specify", "state", os.path.basename(feature_dir) + ".analyzed")
+    marker = os.path.join(repo_root, ".geass", "state", os.path.basename(feature_dir) + ".analyzed")
     if not os.path.isfile(marker):
         print(json.dumps(deny(
-            f"speckit-analyze has not been run for this feature yet. "
-            f"Run speckit-analyze before {skill}."
+            f"analyze has not been run for this feature yet. "
+            f"Run /analyze before {skill}."
         )))
     return 0
 

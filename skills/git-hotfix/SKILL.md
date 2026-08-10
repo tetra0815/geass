@@ -1,8 +1,8 @@
 ---
-name: "speckit-git-hotfix"
+name: "git-hotfix"
 description: "Create a dedicated hotfix branch and git worktree for a bug fix, open it in a new WezTerm tab, and hand off investigation/fixing to superpowers:systematic-debugging there."
 argument-hint: "Describe the bug you need to fix"
-compatibility: "Requires spec-kit project structure with .specify/ directory, git flow, and WezTerm"
+compatibility: "Requires a .geass/ project directory, git flow, and WezTerm or tmux"
 metadata:
   author: "sommelier"
 user-invocable: true
@@ -21,15 +21,15 @@ You **MUST** consider the user input before proceeding. If it is empty: ERROR
 ## Precondition
 
 This command only runs while the root worktree is checked out on the git-flow
-master branch (`main` in this repo). That is enforced by
-`.claude/hooks/speckit_pretooluse_gate.py`, a PreToolUse hook on this Skill — if
-this command's instructions are running at all, the precondition already passed.
+master branch (`main` in this repo). That is enforced by the geass plugin's
+own `hooks/pretooluse_gate.py`, a PreToolUse hook on this Skill — if this
+command's instructions are running at all, the precondition already passed.
 
 ## Outline
 
 1. Run, from the repository root:
    ```bash
-   .specify/scripts/bash/create-hotfix-worktree.sh "$ARGUMENTS"
+   "${CLAUDE_PLUGIN_ROOT}/scripts/create-hotfix-worktree.sh" "$ARGUMENTS"
    ```
 2. If the script exits non-zero: report its stderr output to the user verbatim
    and STOP. Do not retry automatically, do not create any files yourself.
@@ -47,7 +47,7 @@ this command's instructions are running at all, the precondition already passed.
 
 **IMPORTANT**: Do **not** investigate or fix the bug yourself, and do not create
 any spec files — this project's bug fixes go through
-`superpowers:systematic-debugging`, not the speckit pipeline. Actual
+`superpowers:systematic-debugging`, not the spec pipeline. Actual
 investigation happens in the new WezTerm tab's session, inside the isolated
 worktree. This command's only job is to dispatch to that session.
 
