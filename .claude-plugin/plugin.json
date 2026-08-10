@@ -1,7 +1,7 @@
 {
   "name": "geass",
   "description": "Self-contained spec-driven development harness for Claude Code: a full fork of spec-kit's spec/plan/tasks/analyze pipeline plus a git-flow release/hotfix worktree dispatcher (git-feature, git-hotfix), gated on the root worktree's git-flow branch state. No spec-kit installation required.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "tetra0815"
   },
