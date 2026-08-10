@@ -1,0 +1,13 @@
+{
+  "name": "geass",
+  "owner": {
+    "name": "tetra0815"
+  },
+  "plugins": [
+    {
+      "name": "geass",
+      "source": "./",
+      "description": "Git-flow release/hotfix worktree harness for Claude Code"
+    }
+  ]
+}

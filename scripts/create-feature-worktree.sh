@@ -2,7 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+source "$SCRIPT_DIR/harness-common.sh"
 
 REPO_ROOT=$(get_repo_root) || exit 1
 cd "$REPO_ROOT"
@@ -13,25 +13,7 @@ if [ -z "$FEATURE_DESCRIPTION" ]; then
     exit 1
 fi
 
-# Compute the branch/spec-dir name deterministically without creating anything yet,
-# reusing create-new-feature.sh's naming logic instead of duplicating it.
-# --timestamp is required here: create-new-feature.sh does not read
-# init-options.json itself (only speckit-specify's own instructions do), so it
-# must be told explicitly to match what the new worktree's /speckit-specify
-# run will compute.
-DRY_RUN_JSON=$("$SCRIPT_DIR/create-new-feature.sh" --dry-run --json --timestamp "$FEATURE_DESCRIPTION") || exit 1
-
-if command -v jq >/dev/null 2>&1; then
-    BRANCH_NAME=$(printf '%s' "$DRY_RUN_JSON" | jq -r '.BRANCH_NAME')
-else
-    BRANCH_NAME=$(printf '%s' "$DRY_RUN_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["BRANCH_NAME"])')
-fi
-
-if [ -z "$BRANCH_NAME" ] || [ "$BRANCH_NAME" = "null" ]; then
-    echo "Error: failed to compute BRANCH_NAME from create-new-feature.sh --dry-run" >&2
-    exit 1
-fi
-
+BRANCH_NAME=$(generate_slug_name "$FEATURE_DESCRIPTION")
 WORKTREE_PATH="$REPO_ROOT/.claude/worktrees/$BRANCH_NAME"
 SPEC_DIR="specs/$BRANCH_NAME"
 

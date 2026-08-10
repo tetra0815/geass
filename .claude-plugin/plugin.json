@@ -1,0 +1,12 @@
+{
+  "name": "geass",
+  "description": "Git-flow release/hotfix worktree harness for Claude Code: spins up isolated worktrees and WezTerm/tmux tabs for new features (speckit-git-feature) and bugfixes (speckit-git-hotfix), gated on the root worktree's git-flow branch state.",
+  "version": "0.1.0",
+  "author": {
+    "name": "tetra0815"
+  },
+  "homepage": "https://github.com/tetra0815/geass",
+  "repository": "https://github.com/tetra0815/geass",
+  "license": "MIT",
+  "keywords": ["git-flow", "worktree", "speckit", "release-management", "wezterm", "tmux"]
+}
