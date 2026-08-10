@@ -2,7 +2,7 @@
 name: "clarify"
 description: "Identify underspecified areas in the current feature spec by asking up to 5 highly targeted clarification questions and encoding answers back into the spec."
 argument-hint: "Optional areas to clarify in the spec"
-compatibility: "Requires spec-kit project structure with .geass/ directory"
+compatibility: "Requires geass project structure with .geass/ directory"
 metadata:
   author: "github-spec-kit"
   source: "templates/commands/clarify.md"
@@ -146,7 +146,7 @@ Execution steps:
        - NEVER use a topic label, section heading, or requirement id as the question itself. For example, `Acceptance device/runtime matrix (FR-023)` is INVALID — it is a label, not a question.
        - After the `?`, the only permitted suffix is an optional parenthesized requirement/question id. Exact format: `**Question:** <interrogative>?` or `**Question:** <interrogative>? (FR-023)`. Never put the id before the `?`, and never use the id (alone or with a topic label) as the whole prompt.
        - Immediately after the question line, add one plain-language "Why it matters" sentence (the stake for acceptance or shipping) before the recommendation/options.
-       - Use everyday wording; introduce jargon only if defined in the same sentence. Self-check: a reader who does not know Spec Kit must be able to answer from the Question line alone. Terse is fine; cryptic labels are not.
+       - Use everyday wording; introduce jargon only if defined in the same sentence. Self-check: a reader who does not know this project's tooling must be able to answer from the Question line alone. Terse is fine; cryptic labels are not.
     - For multiple‑choice questions:
        - **Analyze all options** and determine the **most suitable option** based on:
           - Best practices for the project type

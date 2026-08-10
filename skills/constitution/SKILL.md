@@ -2,7 +2,7 @@
 name: "constitution"
 description: "Create or update the project constitution from interactive or provided principle inputs."
 argument-hint: "Principles or values for the project constitution"
-compatibility: "Requires project structure with .geass/ directory"
+compatibility: "Requires geass project structure with .geass/ directory"
 metadata:
   author: "github-spec-kit"
   source: "templates/commands/constitution.md"

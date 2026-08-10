@@ -138,6 +138,12 @@ def main() -> int:
         return 0
 
     skill = data.get("tool_input", {}).get("skill", "")
+    # Plugin skills may be passed either bare ("plan") or namespaced
+    # ("geass:plan") -- match on the unqualified name either way rather than
+    # assume one form, since a mismatch here would make the gate a silent
+    # no-op.
+    if ":" in skill:
+        skill = skill.rsplit(":", 1)[-1]
     if skill not in GATED_SKILLS:
         return 0
 

@@ -2,7 +2,7 @@
 name: "specify"
 description: "Create or update the feature specification from a natural language feature description."
 argument-hint: "Describe the feature you want to specify"
-compatibility: "Requires spec-kit project structure with .geass/ directory"
+compatibility: "Requires geass project structure with .geass/ directory"
 metadata:
   author: "github-spec-kit"
   source: "templates/commands/specify.md"
@@ -95,8 +95,7 @@ Given that feature description, do this:
 
    **Create the directory and spec file**:
    - `mkdir -p SPECIFY_FEATURE_DIRECTORY`
-   - Resolve the active `spec-template` through the Spec Kit preset/template resolution stack (equivalent to `specify preset resolve spec-template`)
-   - Copy the resolved `spec-template` file to `SPECIFY_FEATURE_DIRECTORY/spec.md` as the starting point
+   - Copy `${CLAUDE_PLUGIN_ROOT}/templates/spec-template.md` to `SPECIFY_FEATURE_DIRECTORY/spec.md` as the starting point
    - Set `SPEC_FILE` to `SPECIFY_FEATURE_DIRECTORY/spec.md`
    - Persist the resolved path to `.geass/feature.json`:
      ```json
@@ -112,7 +111,7 @@ Given that feature description, do this:
    - The spec directory name and the git branch name are independent — they may be the same but that is the user's choice
    - The spec directory and file are always created by this command, never by the hook
 
-4. Load the resolved active `spec-template` file to understand required sections.
+4. Load `${CLAUDE_PLUGIN_ROOT}/templates/spec-template.md` to understand required sections.
 
 5. **IF EXISTS**: Load `.geass/memory/constitution.md` for project principles and governance constraints.
 

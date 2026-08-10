@@ -2,7 +2,7 @@
 name: "plan"
 description: "Execute the implementation planning workflow using the plan template to generate design artifacts."
 argument-hint: "Optional guidance for the planning phase"
-compatibility: "Requires spec-kit project structure with .geass/ directory"
+compatibility: "Requires geass project structure with .geass/ directory"
 metadata:
   author: "github-spec-kit"
   source: "templates/commands/plan.md"
