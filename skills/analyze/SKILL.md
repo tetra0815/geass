@@ -5,7 +5,7 @@ argument-hint: "Optional focus areas for analysis"
 compatibility: "Requires geass project structure with .geass/ directory"
 metadata:
   author: "github-spec-kit"
-  source: "${CLAUDE_PLUGIN_ROOT}/templates/commands/analyze.md"
+  source: "templates/commands/analyze.md"
 user-invocable: true
 disable-model-invocation: false
 ---
@@ -52,7 +52,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
     Wait for the result of the hook command before proceeding to the Goal.
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:analyze` or `$analyze`). Emitting the block alone does not run the hook.
+    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:{command}` or `${command}`). Emitting the block alone does not run the hook.
 - If no hooks are registered or `.geass/extensions.yml` does not exist, skip silently
 
 ## Goal
@@ -237,7 +237,7 @@ After reporting, check if `.geass/extensions.yml` exists in the project root.
     Executing: `/{command}`
     EXECUTE_COMMAND: {command}
     ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:analyze` or `$analyze`). Emitting the block alone does not run the hook.
+    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:{command}` or `${command}`). Emitting the block alone does not run the hook.
 - If no hooks are registered or `.geass/extensions.yml` does not exist, skip silently
 
 ## Operating Principles
