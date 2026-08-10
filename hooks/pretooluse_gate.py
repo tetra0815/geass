@@ -17,7 +17,12 @@ import os
 import subprocess
 import sys
 
-GATED_SKILLS = {"speckit-plan", "executing-plans", "subagent-driven-development"}
+GATED_SKILLS = {
+    "speckit-git-feature",
+    "speckit-plan",
+    "executing-plans",
+    "subagent-driven-development",
+}
 
 
 def deny(reason: str) -> dict:
@@ -46,6 +51,33 @@ def resolve_feature_paths(repo_root: str):
         return None
 
 
+def root_worktree_branch(repo_root: str):
+    """Return the branch name checked out in the main worktree, or None if
+    detached/unknown. `git worktree list` always lists the main worktree first,
+    regardless of which worktree this hook is invoked from."""
+    result = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    if result.returncode != 0:
+        return None
+    lines = result.stdout.splitlines()
+    for i, line in enumerate(lines):
+        if not line.startswith("worktree "):
+            continue
+        for follow in lines[i + 1:]:
+            if follow.startswith("worktree "):
+                break
+            if follow.startswith("branch refs/heads/"):
+                return follow[len("branch refs/heads/"):]
+            if follow == "detached":
+                return None
+        return None
+    return None
+
+
 def main() -> int:
     data = json.load(sys.stdin)
     if data.get("tool_name") != "Skill":
@@ -58,6 +90,17 @@ def main() -> int:
     repo_root = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
     ).stdout.strip() or os.getcwd()
+
+    if skill == "speckit-git-feature":
+        branch = root_worktree_branch(repo_root)
+        if not branch or not branch.startswith("release/"):
+            print(json.dumps(deny(
+                "ルートworktreeが release/* ブランチではありません"
+                f"（現在: {branch or '(detached)'}）。"
+                "/speckit-git-feature の前に、ルートworktreeで "
+                "`git flow release start <version>` を実行してください。"
+            )))
+        return 0
 
     paths = resolve_feature_paths(repo_root)
     if paths is None:
