@@ -83,7 +83,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Phase 3+: One phase per user story (in priority order from spec.md)
    - Each phase includes: story goal, independent test criteria, tests (if requested), implementation tasks
    - Final Phase: Polish & cross-cutting concerns
-   - All tasks must follow the strict checklist format (see Task Generation Rules below)
+   - All tasks must follow the strict task heading format (see Task Generation Rules below)
    - Clear file paths for each task
    - Dependencies section showing story completion order
    - Parallel execution examples per story
@@ -132,7 +132,7 @@ Output path to generated tasks.md and summary:
 - Parallel opportunities identified
 - Independent test criteria for each story
 - Suggested MVP scope (typically just User Story 1)
-- Format validation: Confirm ALL tasks follow the checklist format (checkbox, ID, labels, file paths)
+- Format validation: Confirm ALL tasks follow the task heading format (`### Task N:` heading, Story/Parallel fields where applicable, Files, checkbox body)
 
 Context for task generation: $ARGUMENTS
 
@@ -144,37 +144,86 @@ The tasks.md should be immediately executable - each task must be specific enoug
 
 **Tests are OPTIONAL**: Only generate test tasks if explicitly requested in the feature specification or if user requests TDD approach.
 
-### Checklist Format (REQUIRED)
+### Task Heading Format (REQUIRED)
 
-Every task MUST strictly follow this format:
+Every task MUST be its own subsection, using a heading that literally starts
+with the word "Task" followed by its sequential number — this exact shape is
+required for superpowers:subagent-driven-development's tooling to locate a
+task by number (it matches headings against `^#+\s+Task\s+[0-9]+`):
 
 ```text
-- [ ] [TaskID] [P?] [Story?] Description with file path
+### Task N: <short description>
+
+**Story:** US1 | **Parallel:** yes
+
+**Files:**
+- Create: `path/to/file.py`
+
+**Interfaces:**
+- Produces: <what later tasks rely on, if anything>
+
+- [ ] <what to do>
 ```
 
 **Format Components**:
 
-1. **Checkbox**: ALWAYS start with `- [ ]` (markdown checkbox)
-2. **Task ID**: Sequential number (T001, T002, T003...) in execution order
-3. **[P] marker**: Include ONLY if task is parallelizable (different files, no dependencies on incomplete tasks)
-4. **[Story] label**: REQUIRED for user story phase tasks only
-   - Format: [US1], [US2], [US3], etc. (maps to user stories from spec.md)
-   - Setup phase: NO story label
-   - Foundational phase: NO story label
-   - User Story phases: MUST have story label
-   - Polish phase: NO story label
-5. **Description**: Clear action with exact file path
+1. **Heading**: `### Task N: <description>` — `N` is a sequential number,
+   unique and never reused, counted across the *entire* document (not reset
+   per phase). This is the task's permanent ID.
+2. **`**Story:**` line**: REQUIRED for user story phase tasks only (format:
+   `US1`, `US2`, `US3`, ... mapping to user stories from spec.md). Omit this
+   line entirely for Setup / Foundational / Polish tasks — they don't belong
+   to a story.
+3. **`**Parallel:**`**: include `**Parallel:** yes` only if the task can run
+   in parallel with its sibling tasks in the same phase (different files, no
+   dependency on an incomplete task in this phase). Omit the field entirely
+   otherwise — don't write `**Parallel:** no`.
+   (`**Story:**` and `**Parallel:**` may share one line, separated by ` | `,
+   or each get their own line — either is fine as long as both are present
+   when applicable.)
+4. **`**Files:**`**: exact path(s) this task creates or modifies.
+5. **`**Interfaces:**`**: only when a later task needs to know a name or
+   signature this task introduces (e.g. a model class a service task will
+   import). Omit this section entirely when nothing depends on it.
+6. **Body**: at least one `- [ ]` checkbox describing what to do. Multiple
+   checkboxes are fine for a task with more than one concrete step.
 
 **Examples**:
 
-- ✅ CORRECT: `- [ ] T001 Create project structure per implementation plan`
-- ✅ CORRECT: `- [ ] T005 [P] Implement authentication middleware in src/middleware/auth.py`
-- ✅ CORRECT: `- [ ] T012 [P] [US1] Create User model in src/models/user.py`
-- ✅ CORRECT: `- [ ] T014 [US1] Implement UserService in src/services/user_service.py`
-- ❌ WRONG: `- [ ] Create User model` (missing ID and Story label)
-- ❌ WRONG: `T001 [US1] Create model` (missing checkbox)
-- ❌ WRONG: `- [ ] [US1] Create User model` (missing Task ID)
-- ❌ WRONG: `- [ ] T001 [US1] Create model` (missing file path)
+- ✅ CORRECT:
+  ```
+  ### Task 1: Create project structure per implementation plan
+
+  - [ ] Create project structure per implementation plan
+  ```
+- ✅ CORRECT:
+  ```
+  ### Task 5: Implement authentication middleware
+
+  **Parallel:** yes
+
+  **Files:**
+  - Create: `src/middleware/auth.py`
+
+  - [ ] Implement authentication middleware in src/middleware/auth.py
+  ```
+- ✅ CORRECT:
+  ```
+  ### Task 12: Create User model
+
+  **Story:** US1 | **Parallel:** yes
+
+  **Files:**
+  - Create: `src/models/user.py`
+
+  - [ ] Create User model in src/models/user.py
+  ```
+- ❌ WRONG: a flat `- [ ] Create User model` line with no `### Task N:`
+  heading of its own (subagent-driven-development cannot locate it)
+- ❌ WRONG: `## Task 1: ...` where the number is reused later in the document
+  for a different task, or renumbered when tasks are inserted/removed
+- ❌ WRONG: omitting the `**Files:**` section for a task that creates or
+  modifies a file
 
 ### Task Organization
 
@@ -189,7 +238,7 @@ Every task MUST strictly follow this format:
 
 2. **From Contracts**:
    - Map each interface contract → to the user story it serves
-   - If tests requested: Each interface contract → contract test task [P] before implementation in that story's phase
+   - If tests requested: Each interface contract → contract test task (marked `**Parallel:** yes`) before implementation in that story's phase
 
 3. **From Data Model**:
    - Map each entity to the user story(ies) that need it
