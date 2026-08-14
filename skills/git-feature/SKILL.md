@@ -1,6 +1,6 @@
 ---
 name: "git-feature"
-description: "Create a dedicated branch and git worktree for a new feature, open it in a new WezTerm tab, and hand off spec creation to /specify there."
+description: "Create a dedicated branch and git worktree for a new feature, open a tracking GitHub issue, open a new WezTerm tab, and hand off to /design-spec there (which itself hands off to /specify once design docs are written)."
 argument-hint: "Describe the feature you want to specify"
 compatibility: "Requires a .geass/ project directory, git flow, and WezTerm or tmux"
 metadata:
@@ -41,11 +41,29 @@ at all, the precondition already passed.
    - Written `WORKTREE_PATH/.claude/settings.local.json` pinning that worktree
      to the Sonnet model
    - Opened a new WezTerm tab, cd'd into `WORKTREE_PATH`, and launched `claude`
-     there with a prompt that runs `/specify` using
+     there with a prompt that runs `/design-spec` using
      `SPECIFY_FEATURE_DIRECTORY=SPEC_DIR` (already decided — the new session
      must not recompute the feature name)
-4. Report completion to the user with `BRANCH_NAME`, `WORKTREE_PATH`, and
-   `SPEC_DIR`.
+
+4. **Open a tracking issue** (GitHub remotes only):
+   - Get the remote with `git config --get remote.origin.url`. If it is not a
+     GitHub URL, skip this step silently — do not attempt to create an issue
+     against a non-GitHub remote.
+   - Use the GitHub MCP server's `create_issue` tool to open exactly one issue
+     in the repository matching that remote:
+     - Title: `Feature: <FEATURE_DESCRIPTION>` (the same description text
+       passed to this command, not `BRANCH_NAME`)
+     - Body: the feature description as given, plus the branch name
+       (`BRANCH_NAME`) so the issue links back to the work
+   - This is one issue per feature — do not create additional issues here for
+     individual design docs or tasks (those come later, from `taskstoissues`).
+   - If issue creation fails for any reason, report the failure to the user
+     but do not treat it as fatal — the branch/worktree/session dispatch above
+     already succeeded and should not be undone.
+
+5. Report completion to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
+   `SPEC_DIR`, and the issue URL (or a note that issue creation was skipped
+   or failed).
 
 **IMPORTANT**: Do **not** create `spec.md` or any other feature file yourself.
 Actual spec creation happens in the new WezTerm tab's session, inside the
@@ -55,6 +73,8 @@ isolated worktree. This command's only job is to dispatch to that session.
 
 - [ ] `create-feature-worktree.sh` exited 0, or its failure was reported
   verbatim and the command stopped
+- [ ] Tracking issue created for GitHub remotes, or skipped/failed and
+  reported as such
 - [ ] Completion reported to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
-  `SPEC_DIR`
+  `SPEC_DIR`, and issue status
 - [ ] No spec files were created by this command

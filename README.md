@@ -3,10 +3,10 @@
 Self-contained spec-driven development harness for Claude Code.
 
 A full fork of [spec-kit](https://github.com/github/spec-kit)'s spec-driven
-pipeline (specify → clarify → plan → tasks → analyze, plus checklist,
-constitution, converge, implement, and taskstoissues) combined with a
-git-flow release/hotfix worktree dispatcher. No spec-kit installation is
-required — every script and template geass needs ships inside the plugin
+pipeline (design-spec → specify → clarify → plan → tasks → analyze, plus
+checklist, constitution, converge, implement, and taskstoissues) combined
+with a git-flow release/hotfix worktree dispatcher. No spec-kit installation
+is required — every script and template geass needs ships inside the plugin
 itself.
 
 Keeps your root worktree dedicated to release management. New feature work
@@ -29,14 +29,17 @@ dispatched automatically instead of by hand.
 ## Usage
 
 - Root worktree on a `release/*` branch: `/git-feature <description>`
-  creates a branch + worktree, opens a new tab, and runs `/specify` there.
+  creates a branch + worktree, opens a tracking GitHub issue (GitHub remotes
+  only), opens a new tab, and runs `/design-spec` there.
 - Root worktree on the git-flow master branch (default `main`):
   `/git-hotfix <description>` creates a `hotfix/*` branch + worktree, opens
   a new tab, and runs `superpowers:systematic-debugging` there.
-- Inside a feature worktree, the usual spec-driven pipeline is available:
-  `/specify` → `/clarify` → `/plan` → `/tasks` → `/analyze`, plus
-  `/checklist`, `/constitution`, `/converge`, `/implement`, and
-  `/taskstoissues`.
+- Inside a feature worktree, the pipeline is `/design-spec` (writes schema,
+  API, security, infrastructure, testing, operations, and client design
+  docs, then hands off to `/specify` in the same session) → `/clarify` →
+  `/plan` → `/tasks` → `/analyze`, plus `/checklist`, `/constitution`,
+  `/converge`, `/implement`, and `/taskstoissues`. `/design-spec` and
+  `/specify` are also usable standalone at any time.
 
 ## Configuration
 

@@ -14,6 +14,14 @@ disable-model-invocation: false
 
 A guide for producing all the design documents needed for implementation, based on the project's **Constitution**.
 
+## User Input
+
+```text
+$ARGUMENTS
+```
+
+If this invocation's prompt includes a line like `SPECIFY_FEATURE_DIRECTORY=<path> is already decided`, this was dispatched by `git-feature` as the start of a new feature: note the `<path>` and the rest of `$ARGUMENTS` as `FEATURE_DESCRIPTION` — they'll be needed for the hand-off to `/specify` at the end of this skill. Otherwise, this is a standalone invocation (e.g. updating design docs mid-project) — proceed without expecting a hand-off at the end.
+
 ---
 
 ## Output Document Structure
@@ -248,6 +256,18 @@ For each category, do the following:
 3. Write the document
 4. Verify consistency with the Constitution
 
+### Step 8: Hand off to `/specify` (feature-bootstrap invocations only)
+
+If a `SPECIFY_FEATURE_DIRECTORY=<path> is already decided` instruction was present in this invocation's prompt (per User Input above), this run was dispatched by `git-feature` to kick off a new feature. Once the design docs above are written, hand off to `/specify` **in this same session** (do not open a new tab or worktree — that already happened):
+
+```
+SPECIFY_FEATURE_DIRECTORY=<path> is already decided -- use it as-is, do not recompute the feature name. /specify <FEATURE_DESCRIPTION>
+```
+
+`/specify` will pick up the diff of the design docs just written (see its Step 6) to ground the spec in these decisions.
+
+If no such instruction was present, this was a standalone design-doc update — stop here, there is nothing to hand off.
+
 ---
 
 ## Unified Output Format
@@ -294,3 +314,4 @@ Before considering this complete, confirm:
 - [ ] The test plan is executable
 - [ ] Logging/monitoring is implementable given the Infrastructure design
 - [ ] The client design is implementable with the chosen tech stack
+- [ ] If this was a feature-bootstrap invocation (`SPECIFY_FEATURE_DIRECTORY` was already decided), handed off to `/specify` in this same session
