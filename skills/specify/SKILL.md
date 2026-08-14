@@ -57,13 +57,15 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-The text the user typed after `/specify` in the triggering message **is** the feature description. Assume you always have it available in this conversation even if `$ARGUMENTS` appears literally below. If they provided an empty command, don't ask them to repeat it until after step 1 below runs — an empty command is only a problem if step 1 also finds no design-doc context to work from.
+The text the user typed after `/specify` in the triggering message **is** the feature description. Assume you always have it available in this conversation even if `$ARGUMENTS` appears literally below.
+
+**If that text is empty, do not react to the emptiness yet — do not ask the user for a description, do not explain what's required, do not stop.** An empty command is not evidence that nothing can be done; it only means step 1 below has to actually run and be checked before anyone decides that. Run step 1's commands now, unconditionally, before forming any judgment about whether input is missing.
 
 Given that feature description, do this:
 
-1. **IF EXISTS**: Load design-doc context produced by the `design-spec` skill, to ground the spec — and this step's short name below — in design decisions already made for this feature rather than re-deriving them from scratch.
+1. **Always run this step, whether or not the feature description is empty** — load design-doc context produced by the `design-spec` skill, to ground the spec — and this step's short name below — in design decisions already made for this feature rather than re-deriving them from scratch. Do not skip straight to "ask the user to describe the feature" without first actually running the checks below; skipping them is the one failure mode this step exists to prevent.
 
-   - Check whether any of `docs/schema/`, `docs/api/`, `docs/security/`, `docs/infrastructure/`, `docs/testing/`, `docs/operations/`, `docs/client/` exist in the repo. If none exist, skip this step silently and proceed to step 2 using the feature description alone.
+   - Check whether any of `docs/schema/`, `docs/api/`, `docs/security/`, `docs/infrastructure/`, `docs/testing/`, `docs/operations/`, `docs/client/` exist in the repo (actually run `ls`/`find` — don't guess from memory of the project). If none exist, skip the rest of this step silently and proceed to step 2 using the feature description alone.
    - Resolve `BASE_BRANCH` in this order:
      1. `base_branch` from `.geass/init-options.json`, if set
      2. Otherwise `develop`, if that branch exists (local or remote) — this is the common git-flow fork point for feature branches
