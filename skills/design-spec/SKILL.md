@@ -247,7 +247,7 @@ API integration points are captured in `screen-<name>.md`'s event/behavior table
 
 ### Step 1: Confirm prerequisites
 - **IF EXISTS**: load `.geass/memory/constitution.md` to understand the project's principles and governance constraints (same loading method as the `specify` skill)
-- Confirm the tech stack and architecture patterns are settled
+- Confirm the tech stack and architecture patterns are settled — treat that choice as a given input to the design docs, not something to justify. Document what the settled choice is and how it's used; don't add rationale/comparison prose for why it was picked, in `infrastructure-as-code.md` or elsewhere, unless a section explicitly asks for it (e.g. `client-architecture.md`'s tooling-rationale bullet)
 
 ### Step 2-7: Produce documents
 For each category, do the following:
@@ -278,7 +278,7 @@ Every document:
 # [Document Name]
 
 ## Overview
-[Brief description, why this is needed]
+[What this document specifies, in one or two sentences]
 
 ## Spec / Design
 [Table definitions, API spec, flow diagrams, etc.]
@@ -287,11 +287,10 @@ Every document:
 [Which Constitution principle(s) this is based on]
 
 ## Implementation Notes
-[Decisions to make during development, trade-offs, future-extension considerations]
-
-## Sample / Example
-[Concrete code examples, sample data]
+[Open trade-offs and constraints that shape this document's design — not a task list, phased rollout, or roadmap; breaking work into phases/tasks is `/tasks`'s job, done later from these settled design docs]
 ```
+
+These are design documents, not implementation — the `Spec / Design` section (tables, diagrams, schemas) is what pins down the design, so no `Sample / Example` section is needed on top of it. Only add one, as a short appendix of a few lines, when a single concrete instance is the clearest way to disambiguate a format already defined above (e.g. one sample log line for `logging.md`, one sample DynamoDB item for a key-design table) — never a runnable code block, function, class, or multi-step operational procedure/runbook (e.g. manual deploy steps, rollback playbooks — those belong to actual runbooks, not this design doc).
 
 ---
 
