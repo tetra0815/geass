@@ -264,7 +264,7 @@ If a `SPECIFY_FEATURE_DIRECTORY=<path> is already decided` instruction was prese
 SPECIFY_FEATURE_DIRECTORY=<path> is already decided -- use it as-is, do not recompute the feature name. /specify <FEATURE_DESCRIPTION>
 ```
 
-`/specify` will pick up the diff of the design docs just written (see its Step 6) to ground the spec in these decisions.
+`/specify` will pick up the diff of the design docs just written (see its Step 1) to ground the spec — and the feature short name it derives — in these decisions.
 
 If no such instruction was present, this was a standalone design-doc update — stop here, there is nothing to hand off.
 

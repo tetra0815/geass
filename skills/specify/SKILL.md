@@ -61,8 +61,22 @@ The text the user typed after `/specify` in the triggering message **is** the fe
 
 Given that feature description, do this:
 
-1. **Generate a concise short name** (2-4 words) for the feature:
-   - Analyze the feature description and extract the most meaningful keywords
+1. **IF EXISTS**: Load design-doc context produced by the `design-spec` skill, to ground the spec — and this step's short name below — in design decisions already made for this feature rather than re-deriving them from scratch.
+
+   - Check whether any of `docs/schema/`, `docs/api/`, `docs/security/`, `docs/infrastructure/`, `docs/testing/`, `docs/operations/`, `docs/client/` exist in the repo. If none exist, skip this step silently and proceed to step 2 using the feature description alone.
+   - Resolve `BASE_BRANCH` in this order:
+     1. `base_branch` from `.geass/init-options.json`, if set
+     2. Otherwise `develop`, if that branch exists (local or remote) — this is the common git-flow fork point for feature branches
+     3. Otherwise `main`
+   - Gather design-doc context from two sources — `design-spec` does not commit its output, so in the common case (design-spec then specify in the same session) the docs are still uncommitted/untracked, and a plain committed-history diff won't see them:
+     1. Committed changes: `git diff BASE_BRANCH...HEAD -- <the design-doc directories that exist>` (triple-dot: diffs against the merge-base, so later changes to `BASE_BRANCH` itself don't pollute the result).
+     2. Uncommitted changes: `git status --porcelain -- <the design-doc directories that exist>`. For each path listed (modified, staged, or untracked), read its current file content directly — `git diff` never shows untracked files, and for a brand-new file the current content *is* the relevant context anyway.
+   - If either source produced content, hold onto it as the design-doc context for step 2 (short name) below, and for steps 7 (extracting concepts, entities, and requirements) and 8 (writing the spec). Use it to understand *what* was designed (entities, endpoints, screens, error cases) — do **not** copy implementation details (schema types, endpoint paths, HTTP methods, table/key names) into the spec itself; the Quick Guidelines below still apply.
+   - If both sources are empty, skip silently — there's no fresh design context to incorporate, proceed to step 2 using the feature description alone.
+
+2. **Generate a concise short name** (2-4 words) for the feature:
+   - If design-doc context was loaded in step 1, summarize what it changed (new entities, endpoints, screens) and let that summary drive the short name alongside the feature description — the diff often carries more specific nouns than a short user prompt does
+   - Otherwise, analyze the feature description alone and extract the most meaningful keywords
    - Create a 2-4 word short name that captures the essence of the feature
    - Use action-noun format when possible (e.g., "add-user-auth", "fix-payment-bug")
    - Preserve technical terms and acronyms (OAuth2, API, JWT, etc.)
@@ -72,14 +86,15 @@ Given that feature description, do this:
      - "Implement OAuth2 integration for the API" → "oauth2-api-integration"
      - "Create a dashboard for analytics" → "analytics-dashboard"
      - "Fix payment processing timeout bug" → "fix-payment-timeout"
+     - Feature description "add device management" + design-doc diff introducing an `IotDevice` entity and MQTT-based `docs/api/` endpoints → "iot-device-mqtt-mgmt" (more specific than the description alone)
 
-2. **Branch creation** (optional, via hook):
+3. **Branch creation** (optional, via hook):
 
    If a `before_specify` hook ran successfully in the Pre-Execution Checks above, it will have created/switched to a git branch and output JSON containing `BRANCH_NAME` and `FEATURE_NUM`. Note these values for reference, but the branch name does **not** dictate the spec directory name.
 
    If the user explicitly provided `GIT_BRANCH_NAME`, pass it through to the hook so the branch script uses the exact value as the branch name (bypassing all prefix/suffix generation).
 
-3. **Create the spec feature directory**:
+4. **Create the spec feature directory**:
 
    Specs live under the default `specs/` directory unless the user explicitly provides `SPECIFY_FEATURE_DIRECTORY`.
 
@@ -111,27 +126,16 @@ Given that feature description, do this:
    - The spec directory name and the git branch name are independent — they may be the same but that is the user's choice
    - The spec directory and file are always created by this command, never by the hook
 
-4. Load `${CLAUDE_PLUGIN_ROOT}/templates/spec-template.md` to understand required sections.
+5. Load `${CLAUDE_PLUGIN_ROOT}/templates/spec-template.md` to understand required sections.
 
-5. **IF EXISTS**: Load `.geass/memory/constitution.md` for project principles and governance constraints.
-
-6. **IF EXISTS**: Load the diff of design docs produced by the `design-spec` skill, to ground the spec in design decisions already made for this feature rather than re-deriving them from scratch.
-
-   - Check whether any of `docs/schema/`, `docs/api/`, `docs/security/`, `docs/infrastructure/`, `docs/testing/`, `docs/operations/`, `docs/client/` exist in the repo. If none exist, skip this step silently.
-   - Resolve `BASE_BRANCH` in this order:
-     1. `base_branch` from `.geass/init-options.json`, if set
-     2. Otherwise `develop`, if that branch exists (local or remote) — this is the common git-flow fork point for feature branches
-     3. Otherwise `main`
-   - Run `git diff BASE_BRANCH...HEAD -- <the design-doc directories that exist>` (triple-dot: diffs against the merge-base, so later changes to `BASE_BRANCH` itself don't pollute the result).
-   - If the diff is non-empty, load it as additional context for step 7 below (extracting concepts, entities, and requirements). Use it to understand *what* was designed (entities, endpoints, screens, error cases) — do **not** copy implementation details (schema types, endpoint paths, HTTP methods, table/key names) into the spec itself; the Quick Guidelines below still apply.
-   - If the diff is empty, skip silently — there's no fresh design context to incorporate.
+6. **IF EXISTS**: Load `.geass/memory/constitution.md` for project principles and governance constraints.
 
 7. Follow this execution flow:
     1. Parse user description from arguments
        If empty: ERROR "No feature description provided"
     2. Extract key concepts from description
        Identify: actors, actions, data, constraints
-       If the design-doc diff was loaded in step 6, cross-reference it here — entities, endpoints, and screens already designed are a strong signal for actors/actions/data
+       If design-doc context was loaded in step 1, cross-reference it here — entities, endpoints, and screens already designed are a strong signal for actors/actions/data
     3. For unclear aspects:
        - Make informed guesses based on context and industry standards
        - Only mark with [NEEDS CLARIFICATION: specific question] if:
@@ -150,10 +154,10 @@ Given that feature description, do this:
        Include both quantitative metrics (time, performance, volume) and qualitative measures (user satisfaction, task completion)
        Each criterion must be verifiable without implementation details
     7. Identify Key Entities (if data involved)
-       If the design-doc diff was loaded in step 6, name entities consistently with what's already in `docs/schema/` rather than inventing parallel names
+       If design-doc context was loaded in step 1, name entities consistently with what's already in `docs/schema/` rather than inventing parallel names
     8. Return: SUCCESS (spec ready for planning)
 
-8. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) and, where loaded, the design-doc diff from step 6, while preserving section order and headings.
+8. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) and, where loaded, the design-doc context from step 1, while preserving section order and headings.
 
 9. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
 
