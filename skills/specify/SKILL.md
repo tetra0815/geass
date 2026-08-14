@@ -57,7 +57,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-The text the user typed after `/specify` in the triggering message **is** the feature description. Assume you always have it available in this conversation even if `$ARGUMENTS` appears literally below. Do not ask the user to repeat it unless they provided an empty command.
+The text the user typed after `/specify` in the triggering message **is** the feature description. Assume you always have it available in this conversation even if `$ARGUMENTS` appears literally below. If they provided an empty command, don't ask them to repeat it until after step 1 below runs — an empty command is only a problem if step 1 also finds no design-doc context to work from.
 
 Given that feature description, do this:
 
@@ -132,7 +132,8 @@ Given that feature description, do this:
 
 7. Follow this execution flow:
     1. Parse user description from arguments
-       If empty: ERROR "No feature description provided"
+       If empty AND no design-doc context was loaded in step 1: ERROR "No feature description provided"
+       If empty but design-doc context was loaded in step 1: proceed using that context as the description's substitute — it already grounds actors, entities, and requirements
     2. Extract key concepts from description
        Identify: actors, actions, data, constraints
        If design-doc context was loaded in step 1, cross-reference it here — entities, endpoints, and screens already designed are a strong signal for actors/actions/data
