@@ -115,11 +115,23 @@ Given that feature description, do this:
 
 5. **IF EXISTS**: Load `.geass/memory/constitution.md` for project principles and governance constraints.
 
-6. Follow this execution flow:
+6. **IF EXISTS**: Load the diff of design docs produced by the `design-spec` skill, to ground the spec in design decisions already made for this feature rather than re-deriving them from scratch.
+
+   - Check whether any of `docs/schema/`, `docs/api/`, `docs/security/`, `docs/infrastructure/`, `docs/testing/`, `docs/operations/`, `docs/client/` exist in the repo. If none exist, skip this step silently.
+   - Resolve `BASE_BRANCH` in this order:
+     1. `base_branch` from `.geass/init-options.json`, if set
+     2. Otherwise `develop`, if that branch exists (local or remote) — this is the common git-flow fork point for feature branches
+     3. Otherwise `main`
+   - Run `git diff BASE_BRANCH...HEAD -- <the design-doc directories that exist>` (triple-dot: diffs against the merge-base, so later changes to `BASE_BRANCH` itself don't pollute the result).
+   - If the diff is non-empty, load it as additional context for step 7 below (extracting concepts, entities, and requirements). Use it to understand *what* was designed (entities, endpoints, screens, error cases) — do **not** copy implementation details (schema types, endpoint paths, HTTP methods, table/key names) into the spec itself; the Quick Guidelines below still apply.
+   - If the diff is empty, skip silently — there's no fresh design context to incorporate.
+
+7. Follow this execution flow:
     1. Parse user description from arguments
        If empty: ERROR "No feature description provided"
     2. Extract key concepts from description
        Identify: actors, actions, data, constraints
+       If the design-doc diff was loaded in step 6, cross-reference it here — entities, endpoints, and screens already designed are a strong signal for actors/actions/data
     3. For unclear aspects:
        - Make informed guesses based on context and industry standards
        - Only mark with [NEEDS CLARIFICATION: specific question] if:
@@ -138,11 +150,12 @@ Given that feature description, do this:
        Include both quantitative metrics (time, performance, volume) and qualitative measures (user satisfaction, task completion)
        Each criterion must be verifiable without implementation details
     7. Identify Key Entities (if data involved)
+       If the design-doc diff was loaded in step 6, name entities consistently with what's already in `docs/schema/` rather than inventing parallel names
     8. Return: SUCCESS (spec ready for planning)
 
-7. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
+8. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) and, where loaded, the design-doc diff from step 6, while preserving section order and headings.
 
-8. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
+9. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
 
    a. **Create Spec Quality Checklist**: Generate a checklist file at `SPECIFY_FEATURE_DIRECTORY/checklists/requirements.md` using the checklist template structure with these validation items:
 
