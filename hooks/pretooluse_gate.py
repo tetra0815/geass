@@ -4,7 +4,7 @@
 Blocks Skill invocations that need a precondition geass itself does not
 otherwise enforce:
 
-  - git-feature: root worktree must be on a <git-flow release
+  - feature-start: root worktree must be on a <git-flow release
     prefix>* branch (git config gitflow.prefix.release, default "release/").
   - git-hotfix: root worktree must be on the git-flow master branch
     (git config gitflow.branch.master, default "main").
@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 GATED_SKILLS = {
-    "git-feature",
+    "feature-start",
     "git-hotfix",
     "plan",
     "executing-plans",
@@ -151,14 +151,14 @@ def main() -> int:
         ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
     ).stdout.strip() or os.getcwd()
 
-    if skill == "git-feature":
+    if skill == "feature-start":
         branch = root_worktree_branch(repo_root)
         prefix = git_flow_release_prefix(repo_root)
         if not branch or not branch.startswith(prefix):
             print(json.dumps(deny(
                 f"ルートworktreeが {prefix}* ブランチではありません"
                 f"（現在: {branch or '(detached)'}）。"
-                "/git-feature の前に、ルートworktreeで "
+                "/feature-start の前に、ルートworktreeで "
                 "`git flow release start <version>` を実行してください。"
             )))
         return 0

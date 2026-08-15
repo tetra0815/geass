@@ -20,7 +20,7 @@ A guide for producing all the design documents needed for implementation, based 
 $ARGUMENTS
 ```
 
-If this invocation's prompt includes a line like `SPECIFY_FEATURE_DIRECTORY=<path> is already decided`, this was dispatched by `git-feature` as the start of a new feature: note the `<path>` and the rest of `$ARGUMENTS` as `FEATURE_DESCRIPTION` — they'll be needed for the hand-off to `/specify` at the end of this skill. Otherwise, this is a standalone invocation (e.g. updating design docs mid-project) — proceed without expecting a hand-off at the end.
+If this invocation's prompt includes a line like `SPECIFY_FEATURE_DIRECTORY=<path> is already decided`, this was dispatched by `feature-start` as the start of a new feature: note the `<path>` and the rest of `$ARGUMENTS` as `FEATURE_DESCRIPTION` — they'll be needed for the hand-off to `/specify` at the end of this skill. Otherwise, this is a standalone invocation (e.g. updating design docs mid-project) — proceed without expecting a hand-off at the end.
 
 ---
 
@@ -258,7 +258,7 @@ For each category, do the following:
 
 ### Step 8: Hand off to `/specify` (feature-bootstrap invocations only)
 
-If a `SPECIFY_FEATURE_DIRECTORY=<path> is already decided` instruction was present in this invocation's prompt (per User Input above), this run was dispatched by `git-feature` to kick off a new feature. Once the design docs above are written, hand off to `/specify` **in this same session** (do not open a new tab or worktree — that already happened):
+If a `SPECIFY_FEATURE_DIRECTORY=<path> is already decided` instruction was present in this invocation's prompt (per User Input above), this run was dispatched by `feature-start` to kick off a new feature. Once the design docs above are written, hand off to `/specify` **in this same session** (do not open a new tab or worktree — that already happened):
 
 ```
 SPECIFY_FEATURE_DIRECTORY=<path> is already decided -- use it as-is, do not recompute the feature name. /specify <FEATURE_DESCRIPTION>

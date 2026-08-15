@@ -1,5 +1,5 @@
 ---
-name: "git-feature"
+name: "feature-start"
 description: "Create a dedicated branch and git worktree for a new feature, open a tracking GitHub issue, open a new WezTerm tab, and hand off to /design-spec there (which itself hands off to /specify once design docs are written)."
 argument-hint: "Describe the feature you want to specify"
 compatibility: "Requires a .geass/ project directory, git flow, and WezTerm or tmux"

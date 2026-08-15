@@ -28,7 +28,7 @@ dispatched automatically instead of by hand.
 
 ## Usage
 
-- Root worktree on a `release/*` branch: `/git-feature <description>`
+- Root worktree on a `release/*` branch: `/feature-start <description>`
   creates a branch + worktree, opens a tracking GitHub issue (GitHub remotes
   only), opens a new tab, and runs `/design-spec` there.
 - Root worktree on the git-flow master branch (default `main`):
