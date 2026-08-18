@@ -24,13 +24,13 @@ get_repo_root() {
     return 1
 }
 
-# Read a top-level string value from .specify/init-options.json.
+# Read a top-level string value from .geass/init-options.json.
 # Prints the value, or empty string if the file/key is missing or
 # unparseable. Always returns 0 so callers under `set -e` are not aborted.
 read_init_option() {
     local repo_root="$1"
     local key="$2"
-    local f="$repo_root/.specify/init-options.json"
+    local f="$repo_root/.geass/init-options.json"
     [[ -f "$f" ]] || { printf '%s' ''; return 0; }
 
     local val=''
@@ -84,7 +84,7 @@ check_terminal_multiplexer() {
             }
             ;;
         *)
-            echo "Error: unknown terminal_multiplexer '$multiplexer' in .specify/init-options.json (expected 'wezterm' or 'tmux')" >&2
+            echo "Error: unknown terminal_multiplexer '$multiplexer' in .geass/init-options.json (expected 'wezterm' or 'tmux')" >&2
             return 1
             ;;
     esac
@@ -92,7 +92,7 @@ check_terminal_multiplexer() {
 
 # Spawn `claude <prompt>` in a new tab/window at $worktree_path, using the
 # terminal multiplexer configured via terminal_multiplexer in
-# .specify/init-options.json (defaults to "wezterm"). Call
+# .geass/init-options.json (defaults to "wezterm"). Call
 # check_terminal_multiplexer first so failures are caught before any git
 # mutation.
 spawn_claude_tab() {
