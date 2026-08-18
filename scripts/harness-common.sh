@@ -102,12 +102,18 @@ spawn_claude_tab() {
     local multiplexer
     multiplexer=$(terminal_multiplexer "$repo_root")
 
+    # The spawning shell (this script, run from the caller's own Bash tool)
+    # already has CLAUDE_CODE_CHILD_SESSION set, and that leaks into the new
+    # pane's process. Claude Code then thinks the new session is a nested
+    # child and silently turns off transcript saving there -- but the new
+    # tab is a genuinely independent top-level session, so force persistence
+    # back on for it explicitly.
     case "$multiplexer" in
         wezterm)
-            wezterm cli spawn --cwd "$worktree_path" -- claude "$prompt" >/dev/null
+            wezterm cli spawn --cwd "$worktree_path" -- env CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 claude "$prompt" >/dev/null
             ;;
         tmux)
-            tmux new-window -c "$worktree_path" -- claude "$prompt" >/dev/null
+            tmux new-window -c "$worktree_path" -- env CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 claude "$prompt" >/dev/null
             ;;
     esac
 }
