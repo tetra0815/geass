@@ -151,10 +151,17 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 6. Execute implementation following the task plan:
    - **Phase-by-phase execution**: Complete each phase before moving to the next
-   - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together
-   - **Follow TDD approach**: Execute test tasks before their corresponding implementation tasks
-   - **File-based coordination**: Tasks affecting the same files must run sequentially
+   - **Respect dependencies**: Run sequential tasks (including TDD test-before-implementation ordering) directly in this session, in order
+   - **Parallel `[P]` tasks run via forked subagents**: within a phase, dispatch independent `[P]` tasks concurrently using the Agent tool with `subagent_type: "fork"` (see "Parallel Task Dispatch" below) instead of executing them one by one in this session
+   - **File-based coordination**: Tasks affecting the same files must be grouped together and run sequentially (see below), never split across concurrent forks
    - **Validation checkpoints**: Verify each phase completion before proceeding
+
+   **Parallel Task Dispatch (fork-based)**:
+   - Group the phase's `[P]` tasks by the file(s) each one touches. Tasks with overlapping files belong in the same group and run sequentially within that group, in this main session; tasks with disjoint files can each form their own independent group.
+   - Dispatch the resulting independent groups concurrently as forks, capped at **5 forks in flight at once**. If more than 5 groups are ready, dispatch in batches of up to 5, waiting for each batch to finish before starting the next.
+   - Each fork's prompt must be self-contained for the task(s) it owns: the specific task ID(s) and description from tasks.md, the relevant file paths, and any acceptance criteria or test requirements from plan.md/contracts/data-model.md needed to complete it. The fork inherits this session's context, so it does not need to re-read tasks.md/plan.md from scratch, but the prompt must still explicitly name which task(s) it owns so it doesn't guess.
+   - Instruct each fork to implement its task(s) and run/verify the corresponding tests, but explicitly **not** to edit tasks.md itself — marking tasks complete happens only in this main session after the batch returns, to avoid concurrent writes corrupting the file.
+   - Wait for every fork in a batch to finish before dispatching the next batch or moving on to the next phase.
 
 7. Implementation execution rules:
    - **Setup first**: Initialize project structure, dependencies, configuration
@@ -164,12 +171,12 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Polish and validation**: Unit tests, performance optimization, documentation
 
 8. Progress tracking and error handling:
-   - Report progress after each completed task
-   - Halt execution if any non-parallel task fails
-   - For parallel tasks [P], continue with successful tasks, report failed ones
-   - Provide clear error messages with context for debugging
+   - Report progress after each completed sequential task and after each completed fork batch
+   - Halt execution if any sequential (non-`[P]`) task fails
+   - For a batch of forked `[P]` task groups, let every fork in the batch finish, then continue with the successful ones and report the failed ones; one fork's failure must not cancel the others already in flight
+   - Provide clear error messages with context for debugging, including which task/fork failed
    - Suggest next steps if implementation cannot proceed
-   - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file.
+   - **IMPORTANT** For completed tasks (sequential or forked), mark them off as [X] in tasks.md only from this main session, after the result is known — never from within a fork itself.
 
 9. Completion validation:
    - Verify all required tasks are completed
