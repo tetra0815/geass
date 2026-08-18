@@ -112,6 +112,22 @@ spawn_claude_tab() {
     esac
 }
 
+# Sanitize free text into a filesystem/branch-safe lowercase slug (letters,
+# digits, single hyphens). Non-ASCII text (e.g. a Japanese feature
+# description) has nothing left after this and collapses to an empty
+# string -- callers should pass an already-English slug (see the callers'
+# --slug flag) rather than relying on this to translate.
+slugify() {
+    local text="$1"
+    printf '%s' "$text" \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/[^a-z0-9]/-/g' \
+        | tr -s '-' \
+        | sed 's/^-//' \
+        | sed 's/-$//' \
+        | cut -d'-' -f1-6
+}
+
 # Generate a filesystem/branch-safe "<timestamp>-<slug>" name from free text.
 # Independent of spec-kit's create-new-feature.sh: the result is passed
 # forward as SPECIFY_FEATURE_DIRECTORY, so it never needs to match spec-kit's
@@ -122,13 +138,8 @@ generate_slug_name() {
     timestamp=$(date +%Y%m%d-%H%M%S)
 
     local slug
-    slug=$(printf '%s' "$description" \
-        | tr '[:upper:]' '[:lower:]' \
-        | sed 's/[^a-z0-9]/-/g' \
-        | sed 's/-\+/-/g' \
-        | sed 's/^-//' \
-        | sed 's/-$//' \
-        | cut -d'-' -f1-6)
+    slug="$(slugify "$description")"
+    slug="${slug:-feature}"
 
     printf '%s-%s' "$timestamp" "$slug"
 }

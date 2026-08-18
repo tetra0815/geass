@@ -101,8 +101,9 @@ Given that feature description, do this:
    Specs live under the default `specs/` directory unless the user explicitly provides `SPECIFY_FEATURE_DIRECTORY`.
 
    **Resolution order for `SPECIFY_FEATURE_DIRECTORY`**:
-   1. If the user explicitly provided `SPECIFY_FEATURE_DIRECTORY` (e.g., via environment variable, argument, or configuration), use it as-is
-   2. Otherwise, auto-generate it under `specs/`:
+   1. If the user explicitly provided `SPECIFY_FEATURE_DIRECTORY` (e.g., via environment variable, argument, or configuration), use it as-is — this is the `feature-start` hand-off path.
+   2. Otherwise, run `git branch --show-current` and check whether it matches a feature-directory-style name: `^[0-9]{8}-[0-9]{6}-[a-z0-9-]+$` (timestamp form, e.g. `20260319-143022-user-auth`) or `^[0-9]{3}-[a-z0-9-]+$` (sequential form, e.g. `003-user-auth`) — the same shapes `feature-start`'s branch-naming script produces. If it matches, set `SPECIFY_FEATURE_DIRECTORY` to `specs/<branch-name>` verbatim (do not re-slugify or renumber it) — this keeps the spec directory and the branch you're actually on from drifting apart when `/specify` runs standalone on a branch `feature-start` already created (no explicit hand-off marker present), e.g. after a design-spec detour, a resumed session, or a manual `/specify` re-run.
+   3. Otherwise (not on a feature-directory-shaped branch — e.g. `main`, `develop`, or an unrelated branch name), auto-generate a fresh directory name under `specs/`:
       - Check `.geass/init-options.json` for `feature_numbering` (preferred) or `branch_numbering` (deprecated, migration only — will be removed in a future release)
       - If `"timestamp"`: prefix is `YYYYMMDD-HHMMSS` (current timestamp)
       - If `"sequential"` or absent: prefix is `NNN` (next available 3-digit number after scanning existing directories in `specs/`)
@@ -125,7 +126,7 @@ Given that feature description, do this:
 
    **IMPORTANT**:
    - You must only create one feature per `/specify` invocation
-   - The spec directory name and the git branch name are independent — they may be the same but that is the user's choice
+   - When the current branch matches a feature-directory-style name (resolution step 2 above), the spec directory name **must** match the branch — do not substitute the short name from Outline step 2 instead. Outside that case (resolution step 3), the spec directory name and the git branch name are independent — they may be the same but that is the user's choice
    - The spec directory and file are always created by this command, never by the hook
 
 5. Load `${CLAUDE_PLUGIN_ROOT}/templates/spec-template.md` to understand required sections.

@@ -7,13 +7,28 @@ source "$SCRIPT_DIR/harness-common.sh"
 REPO_ROOT=$(get_repo_root) || exit 1
 cd "$REPO_ROOT"
 
+SLUG_OVERRIDE=""
+if [ "$1" = "--slug" ]; then
+    SLUG_OVERRIDE="$2"
+    shift 2
+fi
+
 BUG_DESCRIPTION="$*"
 if [ -z "$BUG_DESCRIPTION" ]; then
-    echo "Usage: $0 <bug_description>" >&2
+    echo "Usage: $0 [--slug ENGLISH_SLUG] <bug_description>" >&2
     exit 1
 fi
 
-NAME_SUFFIX=$(generate_slug_name "$BUG_DESCRIPTION")
+if [ -n "$SLUG_OVERRIDE" ]; then
+    # An explicit English slug (e.g. from a non-English bug description the
+    # caller already translated) -- branch/worktree names must stay ASCII
+    # regardless of the description's language.
+    SLUG="$(slugify "$SLUG_OVERRIDE")"
+    SLUG="${SLUG:-hotfix}"
+    NAME_SUFFIX="$(date +%Y%m%d-%H%M%S)-$SLUG"
+else
+    NAME_SUFFIX=$(generate_slug_name "$BUG_DESCRIPTION")
+fi
 BRANCH_NAME="hotfix/$NAME_SUFFIX"
 WORKTREE_PATH="$REPO_ROOT/.claude/worktrees/hotfix/$NAME_SUFFIX"
 

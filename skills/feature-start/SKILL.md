@@ -27,13 +27,26 @@ at all, the precondition already passed.
 
 ## Outline
 
-1. Run, from the repository root:
+1. Generate a concise short name (2-4 words, English/ASCII only, action-noun
+   format, e.g. "add-user-auth") for the feature — regardless of what
+   language `$ARGUMENTS` is written in. Branch and worktree names must stay
+   ASCII; the script's own slugifier strips non-ASCII characters entirely
+   and would otherwise produce a garbage branch name (or worse, a model
+   that bypasses the script may be tempted to write the branch name in the
+   description's own language instead — always translate to a short English
+   slug here first). Call this `SHORT_NAME`.
+
+2. Run, from the repository root:
    ```bash
-   "${CLAUDE_PLUGIN_ROOT}/scripts/create-feature-worktree.sh" "$ARGUMENTS"
+   "${CLAUDE_PLUGIN_ROOT}/scripts/create-feature-worktree.sh" --slug "$SHORT_NAME" "$ARGUMENTS"
    ```
-2. If the script exits non-zero: report its stderr output to the user verbatim
+   Pass `$ARGUMENTS` unmodified (in its original language) after `--slug
+   $SHORT_NAME` — it still drives the GitHub issue title/body and the
+   `/design-spec` handoff prompt below; only the branch/worktree naming
+   needs the English override.
+3. If the script exits non-zero: report its stderr output to the user verbatim
    and STOP. Do not retry automatically, do not create any files yourself.
-3. On success, the script's stdout has three lines: `BRANCH_NAME`,
+4. On success, the script's stdout has three lines: `BRANCH_NAME`,
    `WORKTREE_PATH`, `SPEC_DIR`. By the time it returns, it has already:
    - Created branch `BRANCH_NAME` from the root worktree's current HEAD (the
      root worktree's own checkout is unchanged)
@@ -45,7 +58,7 @@ at all, the precondition already passed.
      `SPECIFY_FEATURE_DIRECTORY=SPEC_DIR` (already decided — the new session
      must not recompute the feature name)
 
-4. **Open a tracking issue** (GitHub remotes only):
+5. **Open a tracking issue** (GitHub remotes only):
    - Get the remote with `git config --get remote.origin.url`. If it is not a
      GitHub URL, skip this step silently — do not attempt to create an issue
      against a non-GitHub remote.
@@ -61,7 +74,7 @@ at all, the precondition already passed.
      but do not treat it as fatal — the branch/worktree/session dispatch above
      already succeeded and should not be undone.
 
-5. Report completion to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
+6. Report completion to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
    `SPEC_DIR`, and the issue URL (or a note that issue creation was skipped
    or failed).
 

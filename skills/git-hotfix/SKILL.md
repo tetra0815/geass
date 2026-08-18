@@ -27,13 +27,25 @@ command's instructions are running at all, the precondition already passed.
 
 ## Outline
 
-1. Run, from the repository root:
+1. Generate a concise short name (2-4 words, English/ASCII only, action-noun
+   format, e.g. "fix-payment-timeout") for the bug — regardless of what
+   language `$ARGUMENTS` is written in. Branch and worktree names must stay
+   ASCII; the script's own slugifier strips non-ASCII characters entirely
+   and would otherwise produce a garbage branch name (or worse, a model
+   that bypasses the script may be tempted to write the branch name in the
+   description's own language instead — always translate to a short English
+   slug here first). Call this `SHORT_NAME`.
+
+2. Run, from the repository root:
    ```bash
-   "${CLAUDE_PLUGIN_ROOT}/scripts/create-hotfix-worktree.sh" "$ARGUMENTS"
+   "${CLAUDE_PLUGIN_ROOT}/scripts/create-hotfix-worktree.sh" --slug "$SHORT_NAME" "$ARGUMENTS"
    ```
-2. If the script exits non-zero: report its stderr output to the user verbatim
+   Pass `$ARGUMENTS` unmodified (in its original language) after `--slug
+   $SHORT_NAME` — it still drives the debugging hand-off prompt below; only
+   the branch/worktree naming needs the English override.
+3. If the script exits non-zero: report its stderr output to the user verbatim
    and STOP. Do not retry automatically, do not create any files yourself.
-3. On success, the script's stdout has two lines: `BRANCH_NAME`,
+4. On success, the script's stdout has two lines: `BRANCH_NAME`,
    `WORKTREE_PATH`. By the time it returns, it has already:
    - Created branch `BRANCH_NAME` (prefixed `hotfix/`) from the root worktree's
      current HEAD (the root worktree's own checkout is unchanged)
@@ -43,7 +55,7 @@ command's instructions are running at all, the precondition already passed.
    - Opened a new WezTerm tab, cd'd into `WORKTREE_PATH`, and launched `claude`
      there with a prompt instructing it to use the
      `superpowers:systematic-debugging` skill to investigate and fix the bug
-4. Report completion to the user with `BRANCH_NAME` and `WORKTREE_PATH`.
+5. Report completion to the user with `BRANCH_NAME` and `WORKTREE_PATH`.
 
 **IMPORTANT**: Do **not** investigate or fix the bug yourself, and do not create
 any spec files — this project's bug fixes go through
