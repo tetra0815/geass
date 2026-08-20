@@ -48,8 +48,12 @@ at all, the precondition already passed.
    and STOP. Do not retry automatically, do not create any files yourself.
 4. On success, the script's stdout has three lines: `BRANCH_NAME`,
    `WORKTREE_PATH`, `SPEC_DIR`. By the time it returns, it has already:
-   - Created branch `BRANCH_NAME` from the root worktree's current HEAD (the
-     root worktree's own checkout is unchanged)
+   - Pulled the root worktree's current branch (`--ff-only`, no-op if it has
+     no upstream) so the new feature branch is based on the latest remote
+     state
+   - Created branch `BRANCH_NAME` from the root worktree's (now up to date)
+     current HEAD (the new worktree checks out a new branch; the root
+     worktree's own branch is unaffected beyond the fast-forward pull above)
    - Created a git worktree at `WORKTREE_PATH`
    - Written `WORKTREE_PATH/.claude/settings.local.json` pinning that worktree
      to the Sonnet model

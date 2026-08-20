@@ -88,6 +88,21 @@ check_terminal_multiplexer() {
     esac
 }
 
+# Pull the root worktree's current branch (must already be the cwd) before
+# branching off of it, so the new feature/hotfix branch is based on the
+# latest remote state instead of whatever was last fetched locally. No-op
+# if the current branch has no upstream configured (e.g. no remote, or an
+# unpushed local-only branch). Uses --ff-only so a diverged local branch
+# fails loudly here rather than silently branching off stale history.
+pull_root_branch() {
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+        git pull --ff-only || {
+            echo "Error: failed to pull the root worktree's branch (see git output above)" >&2
+            return 1
+        }
+    fi
+}
+
 # Spawn `claude <prompt>` in a new tab/window at $worktree_path, using the
 # terminal multiplexer configured via terminal_multiplexer in
 # .geass/init-options.json (defaults to "wezterm"). Call

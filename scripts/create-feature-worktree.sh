@@ -41,10 +41,12 @@ if [ -e "$WORKTREE_PATH" ]; then
     exit 1
 fi
 check_terminal_multiplexer "$REPO_ROOT" || exit 1
+pull_root_branch || exit 1
 
-# Branch from the root worktree's current HEAD. This does not touch the root
-# worktree's own checkout -- `git worktree add` only checks out the new branch
-# in the new worktree directory.
+# Branch from the root worktree's current HEAD (now up to date, see above).
+# `git worktree add` does not otherwise touch the root worktree's own
+# checkout -- it only checks out the new branch in the new worktree
+# directory.
 mkdir -p "$REPO_ROOT/.claude/worktrees"
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" HEAD
 

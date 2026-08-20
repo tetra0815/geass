@@ -41,7 +41,9 @@ if [ -e "$WORKTREE_PATH" ]; then
     exit 1
 fi
 check_terminal_multiplexer "$REPO_ROOT" || exit 1
+pull_root_branch || exit 1
 
+# Branch from the root worktree's current HEAD (now up to date, see above).
 mkdir -p "$REPO_ROOT/.claude/worktrees/hotfix"
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" HEAD
 
