@@ -5,23 +5,21 @@
 # SPECIFY_FEATURE_DIRECTORY override (via speckit-specify's own SKILL.md),
 # never on spec-kit's internal scripts, so spec-kit upgrades can't break it.
 
-# Resolve the repository root by searching upward for a .specify/ marker.
+# Resolve the root (main) git worktree's absolute path, via `git worktree
+# list`, which always lists the main worktree first regardless of which
+# worktree (root or linked) this is invoked from.
+#
+# This harness must always branch off of and nest new worktrees under the
+# true root worktree -- never a linked worktree (e.g. a previous feature's)
+# that the caller's shell happens to be cd'd into. A directory-marker walk
+# (searching upward for e.g. a .geass/ directory) cannot be used for this:
+# every worktree of the repo checks out the same tracked files at its own
+# top level, so a marker walk started inside a linked worktree finds that
+# worktree's own copy of the marker immediately and stops there, silently
+# resolving to the wrong worktree instead of continuing up to the root.
 get_repo_root() {
-    local dir="${1:-$(pwd)}"
-    dir="$(cd -- "$dir" 2>/dev/null && pwd)" || return 1
-    local prev_dir=""
-    while true; do
-        if [ -d "$dir/.specify" ]; then
-            echo "$dir"
-            return 0
-        fi
-        if [ "$dir" = "/" ] || [ "$dir" = "$prev_dir" ]; then
-            break
-        fi
-        prev_dir="$dir"
-        dir="$(dirname "$dir")"
-    done
-    return 1
+    git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print substr($0, 10); exit}'
+    [[ "${PIPESTATUS[0]}" -eq 0 ]] || return 1
 }
 
 # Read a top-level string value from .geass/init-options.json.
