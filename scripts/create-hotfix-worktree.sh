@@ -41,11 +41,15 @@ if [ -e "$WORKTREE_PATH" ]; then
     exit 1
 fi
 check_terminal_multiplexer "$REPO_ROOT" || exit 1
+ROOT_BRANCH=$(require_root_branch "$(git_flow_master_branch)") || exit 1
 pull_root_branch || exit 1
+BASE_COMMIT=$(git rev-parse HEAD)
 
-# Branch from the root worktree's current HEAD (now up to date, see above).
+# Branch from the root worktree's current HEAD (now up to date, and pinned
+# to an explicit commit rather than the ambiguous literal "HEAD" -- see
+# require_root_branch's comment for why this is verified, not assumed).
 mkdir -p "$REPO_ROOT/.claude/worktrees/hotfix"
-git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" HEAD
+git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" "$BASE_COMMIT"
 
 mkdir -p "$WORKTREE_PATH/.claude"
 cat > "$WORKTREE_PATH/.claude/settings.local.json" <<SETTINGSEOF
@@ -60,3 +64,5 @@ spawn_claude_tab "$REPO_ROOT" "$WORKTREE_PATH" "$PROMPT"
 
 echo "BRANCH_NAME: $BRANCH_NAME"
 echo "WORKTREE_PATH: $WORKTREE_PATH"
+echo "BASE_BRANCH: $ROOT_BRANCH"
+echo "BASE_COMMIT: $BASE_COMMIT"

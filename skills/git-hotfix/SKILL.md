@@ -24,6 +24,9 @@ This command only runs while the root worktree is checked out on the git-flow
 master branch (`main` in this repo). That is enforced by the geass plugin's
 own `hooks/pretooluse_gate.py`, a PreToolUse hook on this Skill — if this
 command's instructions are running at all, the precondition already passed.
+`create-hotfix-worktree.sh` itself also re-checks this immediately before
+branching (belt-and-suspenders against the hook not firing for some reason)
+and fails loudly if it doesn't hold.
 
 ## Outline
 
@@ -45,8 +48,9 @@ command's instructions are running at all, the precondition already passed.
    the branch/worktree naming needs the English override.
 3. If the script exits non-zero: report its stderr output to the user verbatim
    and STOP. Do not retry automatically, do not create any files yourself.
-4. On success, the script's stdout has two lines: `BRANCH_NAME`,
-   `WORKTREE_PATH`. By the time it returns, it has already:
+4. On success, the script's stdout has four lines: `BRANCH_NAME`,
+   `WORKTREE_PATH`, `BASE_BRANCH`, `BASE_COMMIT`. By the time it returns, it
+   has already:
    - Pulled the root worktree's current branch (`--ff-only`, no-op if it has
      no upstream) so the hotfix branch is based on the latest remote state
    - Created branch `BRANCH_NAME` (prefixed `hotfix/`) from the root worktree's
@@ -59,7 +63,10 @@ command's instructions are running at all, the precondition already passed.
    - Opened a new WezTerm tab, cd'd into `WORKTREE_PATH`, and launched `claude`
      there with a prompt instructing it to use the
      `superpowers:systematic-debugging` skill to investigate and fix the bug
-5. Report completion to the user with `BRANCH_NAME` and `WORKTREE_PATH`.
+5. Report completion to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
+   `BASE_BRANCH`, and `BASE_COMMIT` — the latter two let the user immediately
+   confirm the hotfix branch was actually cut from the master branch they
+   expect, rather than having to dig this up later.
 
 **IMPORTANT**: Do **not** investigate or fix the bug yourself, and do not create
 any spec files — this project's bug fixes go through
@@ -71,5 +78,6 @@ worktree. This command's only job is to dispatch to that session.
 
 - [ ] `create-hotfix-worktree.sh` exited 0, or its failure was reported
   verbatim and the command stopped
-- [ ] Completion reported to the user with `BRANCH_NAME`, `WORKTREE_PATH`
+- [ ] Completion reported to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
+  `BASE_BRANCH`, `BASE_COMMIT`
 - [ ] No investigation, fix, or file changes were made by this command

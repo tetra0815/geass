@@ -23,7 +23,9 @@ You **MUST** consider the user input before proceeding. If it is empty: ERROR
 This command only runs while the root worktree is checked out on a `release/*`
 branch. That is enforced by the geass plugin's own `hooks/pretooluse_gate.py`,
 a PreToolUse hook on this Skill — if this command's instructions are running
-at all, the precondition already passed.
+at all, the precondition already passed. `create-feature-worktree.sh` itself
+also re-checks this immediately before branching (belt-and-suspenders against
+the hook not firing for some reason) and fails loudly if it doesn't hold.
 
 ## Outline
 
@@ -46,8 +48,9 @@ at all, the precondition already passed.
    needs the English override.
 3. If the script exits non-zero: report its stderr output to the user verbatim
    and STOP. Do not retry automatically, do not create any files yourself.
-4. On success, the script's stdout has three lines: `BRANCH_NAME`,
-   `WORKTREE_PATH`, `SPEC_DIR`. By the time it returns, it has already:
+4. On success, the script's stdout has five lines: `BRANCH_NAME`,
+   `WORKTREE_PATH`, `SPEC_DIR`, `BASE_BRANCH`, `BASE_COMMIT`. By the time it
+   returns, it has already:
    - Pulled the root worktree's current branch (`--ff-only`, no-op if it has
      no upstream) so the new feature branch is based on the latest remote
      state
@@ -79,8 +82,10 @@ at all, the precondition already passed.
      already succeeded and should not be undone.
 
 6. Report completion to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
-   `SPEC_DIR`, and the issue URL (or a note that issue creation was skipped
-   or failed).
+   `SPEC_DIR`, `BASE_BRANCH`, `BASE_COMMIT`, and the issue URL (or a note
+   that issue creation was skipped or failed) — `BASE_BRANCH`/`BASE_COMMIT`
+   let the user immediately confirm the feature branch was actually cut from
+   the release branch they expect, rather than having to dig this up later.
 
 **IMPORTANT**: Do **not** create `spec.md` or any other feature file yourself.
 Actual spec creation happens in the new WezTerm tab's session, inside the
@@ -93,5 +98,5 @@ isolated worktree. This command's only job is to dispatch to that session.
 - [ ] Tracking issue created for GitHub remotes, or skipped/failed and
   reported as such
 - [ ] Completion reported to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
-  `SPEC_DIR`, and issue status
+  `SPEC_DIR`, `BASE_BRANCH`, `BASE_COMMIT`, and issue status
 - [ ] No spec files were created by this command

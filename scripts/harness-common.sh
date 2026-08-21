@@ -88,6 +88,60 @@ check_terminal_multiplexer() {
     esac
 }
 
+# Return the configured git-flow release branch prefix, defaulting to
+# "release/" (mirrors hooks/pretooluse_gate.py's git_flow_release_prefix).
+git_flow_release_prefix() {
+    local prefix
+    prefix=$(git config gitflow.prefix.release 2>/dev/null)
+    printf '%s' "${prefix:-release/}"
+}
+
+# Return the configured git-flow master branch name, defaulting to "main"
+# (mirrors hooks/pretooluse_gate.py's git_flow_master_branch).
+git_flow_master_branch() {
+    local branch
+    branch=$(git config gitflow.branch.master 2>/dev/null)
+    printf '%s' "${branch:-main}"
+}
+
+# Defense in depth alongside hooks/pretooluse_gate.py's own PreToolUse
+# precondition check: verify the root worktree (must already be the cwd) is
+# actually checked out on the expected branch right before this harness
+# branches off of it, and print that branch name. $1 is either an exact
+# branch name, or a prefix ending in "/" to match as a prefix.
+#
+# feature-start and git-hotfix have each been silently observed branching
+# off the wrong base despite the PreToolUse gate supposedly covering this --
+# whatever the exact cause (a swallowed/misrouted hook invocation, a race,
+# etc.), this check makes that failure mode loud and diagnosable right here
+# instead of silently producing a branch/worktree based on the wrong commit.
+require_root_branch() {
+    local expected="$1"
+    local branch
+    branch=$(git symbolic-ref --quiet --short HEAD) || {
+        echo "Error: root worktree is in a detached HEAD state; expected '$expected'" >&2
+        return 1
+    }
+    case "$expected" in
+        */)
+            case "$branch" in
+                "$expected"*) ;;
+                *)
+                    echo "Error: root worktree is on '$branch', expected a '${expected}*' branch. Run \`git flow release start <version>\` (or \`git checkout\` to the right branch) in the root worktree first." >&2
+                    return 1
+                    ;;
+            esac
+            ;;
+        *)
+            if [[ "$branch" != "$expected" ]]; then
+                echo "Error: root worktree is on '$branch', expected '$expected'. Run \`git checkout $expected\` in the root worktree first." >&2
+                return 1
+            fi
+            ;;
+    esac
+    printf '%s' "$branch"
+}
+
 # Pull the root worktree's current branch (must already be the cwd) before
 # branching off of it, so the new feature/hotfix branch is based on the
 # latest remote state instead of whatever was last fetched locally. No-op
