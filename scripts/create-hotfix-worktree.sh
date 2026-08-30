@@ -41,7 +41,7 @@ if [ -e "$WORKTREE_PATH" ]; then
     exit 1
 fi
 check_terminal_multiplexer "$REPO_ROOT" || exit 1
-ROOT_BRANCH=$(require_root_branch "$(git_flow_master_branch)") || exit 1
+ROOT_BRANCH=$(require_root_branch "$(git_flow_master_branch)" "$(git_flow_release_prefix)") || exit 1
 pull_root_branch || exit 1
 BASE_COMMIT=$(git rev-parse HEAD)
 

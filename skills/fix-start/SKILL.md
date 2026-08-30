@@ -1,5 +1,5 @@
 ---
-name: "git-hotfix"
+name: "fix-start"
 description: "Create a dedicated hotfix branch and git worktree for a bug fix, open it in a new WezTerm tab, and hand off investigation/fixing to superpowers:systematic-debugging there."
 argument-hint: "Describe the bug you need to fix"
 compatibility: "Requires a .geass/ project directory, git flow, and WezTerm or tmux"
@@ -21,12 +21,13 @@ You **MUST** consider the user input before proceeding. If it is empty: ERROR
 ## Precondition
 
 This command only runs while the root worktree is checked out on the git-flow
-master branch (`main` in this repo). That is enforced by the geass plugin's
-own `hooks/pretooluse_gate.py`, a PreToolUse hook on this Skill — if this
-command's instructions are running at all, the precondition already passed.
-`create-hotfix-worktree.sh` itself also re-checks this immediately before
-branching (belt-and-suspenders against the hook not firing for some reason)
-and fails loudly if it doesn't hold.
+master branch (`main` in this repo) **or** a `release/*` branch — a bugfix may
+legitimately start from either, the same as `feature-start`'s rule for the
+latter. That is enforced by the geass plugin's own `hooks/pretooluse_gate.py`,
+a PreToolUse hook on this Skill — if this command's instructions are running
+at all, the precondition already passed. `create-hotfix-worktree.sh` itself
+also re-checks this immediately before branching (belt-and-suspenders against
+the hook not firing for some reason) and fails loudly if it doesn't hold.
 
 ## Outline
 

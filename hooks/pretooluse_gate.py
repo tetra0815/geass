@@ -6,8 +6,9 @@ otherwise enforce:
 
   - feature-start: root worktree must be on a <git-flow release
     prefix>* branch (git config gitflow.prefix.release, default "release/").
-  - git-hotfix: root worktree must be on the git-flow master branch
-    (git config gitflow.branch.master, default "main").
+  - fix-start: root worktree must be on the git-flow master branch
+    (git config gitflow.branch.master, default "main") OR a <git-flow
+    release prefix>* branch -- a bugfix may legitimately start from either.
   - plan: requires spec.md to already have a '## Clarifications'
     section (i.e. clarify ran first). Optional -- controlled by
     enforce_clarify_before_plan in .geass/init-options.json (default true).
@@ -28,7 +29,7 @@ import sys
 
 GATED_SKILLS = {
     "feature-start",
-    "git-hotfix",
+    "fix-start",
     "plan",
     "executing-plans",
     "subagent-driven-development",
@@ -163,15 +164,17 @@ def main() -> int:
             )))
         return 0
 
-    if skill == "git-hotfix":
+    if skill == "fix-start":
         branch = root_worktree_branch(repo_root)
         master_branch = git_flow_master_branch(repo_root)
-        if branch != master_branch:
+        prefix = git_flow_release_prefix(repo_root)
+        if not branch or not (branch == master_branch or branch.startswith(prefix)):
             print(json.dumps(deny(
-                f"ルートworktreeが {master_branch} ブランチではありません"
+                f"ルートworktreeが {master_branch} または {prefix}* ブランチではありません"
                 f"（現在: {branch or '(detached)'}）。"
-                "/git-hotfix の前に、ルートworktreeで "
-                f"`git checkout {master_branch}` を実行してください。"
+                "/fix-start の前に、ルートworktreeで "
+                f"`git checkout {master_branch}` または "
+                "`git flow release start <version>` を実行してください。"
             )))
         return 0
 

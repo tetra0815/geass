@@ -106,40 +106,56 @@ git_flow_master_branch() {
 
 # Defense in depth alongside hooks/pretooluse_gate.py's own PreToolUse
 # precondition check: verify the root worktree (must already be the cwd) is
-# actually checked out on the expected branch right before this harness
-# branches off of it, and print that branch name. $1 is either an exact
-# branch name, or a prefix ending in "/" to match as a prefix.
+# actually checked out on one of the expected branches right before this
+# harness branches off of it, and print that branch name. Each argument is
+# either an exact branch name, or a prefix ending in "/" to match as a
+# prefix; the branch passes if it matches ANY argument (feature-start passes
+# one pattern, fix-start passes two -- the master branch and the release
+# prefix -- since it may legitimately run from either).
 #
-# feature-start and git-hotfix have each been silently observed branching
+# feature-start and fix-start have each been silently observed branching
 # off the wrong base despite the PreToolUse gate supposedly covering this --
 # whatever the exact cause (a swallowed/misrouted hook invocation, a race,
 # etc.), this check makes that failure mode loud and diagnosable right here
 # instead of silently producing a branch/worktree based on the wrong commit.
 require_root_branch() {
-    local expected="$1"
     local branch
     branch=$(git symbolic-ref --quiet --short HEAD) || {
-        echo "Error: root worktree is in a detached HEAD state; expected '$expected'" >&2
+        echo "Error: root worktree is in a detached HEAD state; expected one of: $*" >&2
         return 1
     }
-    case "$expected" in
-        */)
-            case "$branch" in
-                "$expected"*) ;;
-                *)
-                    echo "Error: root worktree is on '$branch', expected a '${expected}*' branch. Run \`git flow release start <version>\` (or \`git checkout\` to the right branch) in the root worktree first." >&2
-                    return 1
-                    ;;
-            esac
-            ;;
-        *)
-            if [[ "$branch" != "$expected" ]]; then
-                echo "Error: root worktree is on '$branch', expected '$expected'. Run \`git checkout $expected\` in the root worktree first." >&2
-                return 1
-            fi
-            ;;
-    esac
-    printf '%s' "$branch"
+    local expected
+    for expected in "$@"; do
+        case "$expected" in
+            */)
+                case "$branch" in
+                    "$expected"*)
+                        printf '%s' "$branch"
+                        return 0
+                        ;;
+                esac
+                ;;
+            *)
+                if [[ "$branch" == "$expected" ]]; then
+                    printf '%s' "$branch"
+                    return 0
+                fi
+                ;;
+        esac
+    done
+    if [[ $# -eq 1 ]]; then
+        case "$1" in
+            */)
+                echo "Error: root worktree is on '$branch', expected a '${1}*' branch. Run \`git flow release start <version>\` (or \`git checkout\` to the right branch) in the root worktree first." >&2
+                ;;
+            *)
+                echo "Error: root worktree is on '$branch', expected '$1'. Run \`git checkout $1\` in the root worktree first." >&2
+                ;;
+        esac
+    else
+        echo "Error: root worktree is on '$branch', expected one of: $* (exact branch names or 'prefix/' patterns). Run \`git checkout\` to one of them in the root worktree first." >&2
+    fi
+    return 1
 }
 
 # Pull the root worktree's current branch (must already be the cwd) before
