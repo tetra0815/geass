@@ -268,6 +268,35 @@ Every addressable unit a design document defines (a screen, an API endpoint, a t
 
 ---
 
+## Design Decision Gate
+
+Before writing a document whose content hinges on a genuinely open design choice, surface it
+and get the user's answer first — the same gate `superpowers:brainstorming` puts in front of
+other creative work in this project, scaled down to one document's internal shape. This is
+not a replacement for brainstorming: by the time `design-spec` runs, requirements are already
+settled and the tech stack is already given (Step 1), so the only thing left open is *how one
+document's design is shaped*.
+
+**What counts as open**: a choice with real trade-offs that isn't already implied by the
+constitution, the settled tech stack, the feature description, or a decision already approved
+earlier in this same run — e.g. table normalization shape, sync vs. async data flow, RBAC vs.
+ABAC, cache invalidation strategy, REST vs. an ad-hoc RPC shape for one endpoint group. Skip
+the gate for anything mechanical or already dictated (a store type the tech stack already
+named, an error-code format the constitution fixes, a field the data model obviously needs) —
+re-litigating a settled decision wastes the user's time.
+
+**The loop**, at most once per document:
+1. List the open decisions found for that document. Batch independent ones into a single
+   message; ask dependent ones one at a time, in dependency order.
+2. For each, present 2-3 approaches with trade-offs and a recommendation (lead with the
+   recommended one and say why) — the same shape as brainstorming's "Exploring approaches."
+3. Get explicit approval (or the user's own answer) before writing any of that document.
+4. Only then produce the document body, reflecting what was decided.
+
+A document with nothing open skips the gate entirely — go straight to writing it.
+
+---
+
 ## Execution Flow
 
 ### Step 1: Confirm prerequisites
@@ -277,9 +306,10 @@ Every addressable unit a design document defines (a screen, an API endpoint, a t
 ### Step 2-7: Produce documents
 For each category, do the following:
 1. Check consistency with `.geass/memory/constitution.md`
-2. Flesh out the spec/design for that area
-3. Write the document
-4. Verify consistency with the Constitution
+2. Identify open decisions for this document and run the Design Decision Gate above, if any
+3. Flesh out the spec/design for that area
+4. Write the document
+5. Verify consistency with the Constitution
 
 ### Step 8: Hand off to `/specify` (feature-bootstrap invocations only)
 
@@ -331,6 +361,7 @@ These are design documents, not implementation — the `Spec / Design` section (
 
 Before considering this complete, confirm:
 
+- [ ] Every open design decision was surfaced via the Design Decision Gate and approved before its document was written
 - [ ] All documents are consistent with the Constitution
 - [ ] The schema design is implementable
 - [ ] The API spec follows the design patterns
