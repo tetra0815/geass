@@ -63,6 +63,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Required**: plan.md (tech stack, libraries, structure), spec.md (user stories with priorities)
    - **Optional**: data-model.md (entities), contracts/ (interface contracts), research.md (decisions), quickstart.md (test scenarios)
    - **IF EXISTS**: Load `.geass/memory/constitution.md` for project principles and governance constraints
+   - **IF EXISTS**: Load the project-global `docs/` design documents this feature touches (`docs/client/`, `docs/api/`, `docs/schema/`, `docs/security/`, `docs/infrastructure/`, `docs/operations/`) to resolve Design IDs (`SCR-`, `API-`, `RDB-`, `MDB-`, `OBJ-`, `EVT-`, `SEC-`, `INF-`, `OPS-` — see `design-spec`'s Design ID Convention) for the screens/endpoints/tables/etc. this feature's entities and contracts map to
    - Note: Not all projects have all documents. Generate tasks based on what's available.
 
 3. **Execute task generation workflow**:
@@ -162,6 +163,8 @@ task by number (it matches headings against `^#+\s+Task\s+[0-9]+`):
 **Interfaces:**
 - Produces: <what later tasks rely on, if anything>
 
+**Design Refs:** SCR-014, API-023
+
 - [ ] <what to do>
 ```
 
@@ -185,7 +188,15 @@ task by number (it matches headings against `^#+\s+Task\s+[0-9]+`):
 5. **`**Interfaces:**`**: only when a later task needs to know a name or
    signature this task introduces (e.g. a model class a service task will
    import). Omit this section entirely when nothing depends on it.
-6. **Body**: at least one `- [ ]` checkbox describing what to do. Multiple
+6. **`**Design Refs:**`**: comma-separated Design IDs (`SCR-`, `API-`, `RDB-`,
+   `MDB-`, `OBJ-`, `EVT-`, `SEC-`, `INF-`, `OPS-`) from the project's `docs/`
+   design documents that this task implements. Include it only when this
+   task's files/entities/endpoints resolve to an assigned Design ID in step 2
+   above; omit the field entirely otherwise — don't leave it blank. `/implement`
+   uses this to stamp the corresponding ID as a code comment near what it
+   writes, so it must name IDs that already exist in the design docs, never
+   invent new ones here.
+7. **Body**: at least one `- [ ]` checkbox describing what to do. Multiple
    checkboxes are fine for a task with more than one concrete step.
 
 **Examples**:

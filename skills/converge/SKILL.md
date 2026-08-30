@@ -135,6 +135,12 @@ Load only the minimal necessary context from each artifact:
 
 - Principle names and MUST/SHOULD normative statements
 
+**From `docs/` (if present):**
+
+- Design IDs (`SCR-`, `API-`, `RDB-`, `MDB-`, `OBJ-`, `EVT-`, `SEC-`, `INF-`, `OPS-` — per
+  `design-spec`'s Design ID Convention) for the screens/endpoints/tables/etc. the requirements
+  inventory below touches, so gaps can be traced back to the design doc that specifies them.
+
 ### 3. Build the Intent Inventory
 
 Create an internal model (do not echo raw artifacts):
@@ -162,7 +168,8 @@ For each item in the intent inventory, inspect the current code in scope and pro
   review/justify or remove it).
 
 Each `Finding` records: a stable id, the `source-ref` it traces to, the `gap-type`, a
-severity, and a short human-readable description with the evidence (the file/area observed).
+severity, a short human-readable description with the evidence (the file/area observed), and
+— when the requirement resolves to an assigned Design ID from `docs/` — that ID.
 
 **Edge cases:**
 
@@ -211,13 +218,18 @@ Append to the **end** of `tasks.md`, per the append contract:
    zero-padded IDs `T{M+1:03d}, T{M+2:03d}, …`:
 
    ```markdown
-   - [ ] T042 <imperative description> per <source-ref> (<gap-type>)
+   - [ ] T042 <imperative description> per <source-ref> (<gap-type>) [Design: SCR-014, API-023]
    ```
 
    `<source-ref>` traces the task to its origin: e.g. `FR-003`, `SC-002`,
    `US1/AC2`, `plan: storage decision`, `Constitution II`.
 
    `<gap-type>` is one of `missing`, `partial`, `contradicts`, `unrequested`.
+
+   The trailing `[Design: ...]` marker is the flat-checklist equivalent of `**Design Refs:**`
+   on a `### Task N:`-style task — include it only when the finding resolved to one or more
+   Design IDs in Step 2/4 above; omit the marker entirely otherwise. `/implement` looks for
+   it the same way it looks for `**Design Refs:**`.
 
    Constitution-violation tasks MUST be emitted first and described as
    `CRITICAL`.

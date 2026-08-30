@@ -243,6 +243,31 @@ API integration points are captured in `screen-<name>.md`'s event/behavior table
 
 ---
 
+## Design ID Convention
+
+Every addressable unit a design document defines (a screen, an API endpoint, a table/collection/key-family, an event/message type, a security policy, an infrastructure resource, a log field or metric) gets a stable ID of the form `<PREFIX>-<NNN>` (3-digit zero-padded, e.g. `SCR-014`). This ID is the anchor that `/tasks` and `/implement` later use to trace a task and its code back to the design doc that specifies it — no separate mapping file is maintained; the ID itself, referenced from a task's `**Design Refs:**` field and from an inline code comment, is the link.
+
+**Prefixes**:
+
+| Prefix | Covers | Documents |
+|---|---|---|
+| `SCR` | Screens | `docs/client/screen-<name>.md`, `ui-ux.md` |
+| `API` | API endpoints (REST/GraphQL) | `docs/api/endpoints.md`, `openapi.yaml`, `graphql-schema.md` |
+| `RDB` | Relational/document DB schema | `docs/schema/storage-<name>.md` (RDB-type stores) |
+| `MDB` | In-memory DB / cache | `docs/schema/storage-<name>.md` (Redis-type stores) |
+| `OBJ` | Object/blob storage | `docs/schema/storage-<name>.md` (S3-type stores) |
+| `EVT` | Event/message formats | `docs/schema/data-formats.md` |
+| `SEC` | Auth, access control, data protection | `docs/security/*` |
+| `INF` | Infrastructure/IaC/deployment | `docs/infrastructure/*` |
+| `OPS` | Logging/monitoring | `docs/operations/*` |
+
+**Assigning IDs**:
+- Place the ID at whatever granularity the document already addresses that unit at — a heading (`### ログイン画面 (SCR-014)`), or an ID column in an inventory/summary table (`ui-ux.md`'s screen list, `endpoints.md`'s endpoint table, a `storage-<name>.md` table/key-design row). Don't invent a new table just to hold IDs.
+- IDs are unique per prefix **across the whole project**, not reset per file or per feature. Before assigning a new ID, grep the relevant `docs/` subtree for existing `<PREFIX>-\d+` occurrences and continue from the current max + 1. This matters for standalone/mid-project invocations of this skill, which add to documents a prior feature already assigned IDs in.
+- Never renumber or reuse a retired ID, even after the unit it named is removed — leave the gap. A stale code comment referencing a retired ID must not silently point at something else.
+
+---
+
 ## Execution Flow
 
 ### Step 1: Confirm prerequisites

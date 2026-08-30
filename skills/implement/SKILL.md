@@ -146,7 +146,9 @@ You **MUST** consider the user input before proceeding (if not empty).
 5. Parse tasks.md structure and extract:
    - **Task phases**: Setup, Tests, Core, Integration, Polish
    - **Task dependencies**: Sequential vs parallel execution rules
-   - **Task details**: ID, description, file paths, parallel markers [P]
+   - **Task details**: ID, description, file paths, parallel markers [P], Design IDs — from a
+     `### Task N:`-style task's `**Design Refs:**` field, or from a flat Convergence-phase
+     checklist item's trailing `[Design: ...]` marker
    - **Execution flow**: Order and dependency requirements
 
 6. Execute implementation following the task plan:
@@ -159,7 +161,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    **Parallel Task Dispatch (fork-based)**:
    - Group the phase's `[P]` tasks by the file(s) each one touches. Tasks with overlapping files belong in the same group and run sequentially within that group, in this main session; tasks with disjoint files can each form their own independent group.
    - Dispatch the resulting independent groups concurrently as forks, capped at **5 forks in flight at once**. If more than 5 groups are ready, dispatch in batches of up to 5, waiting for each batch to finish before starting the next.
-   - Each fork's prompt must be self-contained for the task(s) it owns: the specific task ID(s) and description from tasks.md, the relevant file paths, and any acceptance criteria or test requirements from plan.md/contracts/data-model.md needed to complete it. The fork inherits this session's context, so it does not need to re-read tasks.md/plan.md from scratch, but the prompt must still explicitly name which task(s) it owns so it doesn't guess.
+   - Each fork's prompt must be self-contained for the task(s) it owns: the specific task ID(s) and description from tasks.md, the relevant file paths, any `**Design Refs:**` IDs to stamp, and any acceptance criteria or test requirements from plan.md/contracts/data-model.md needed to complete it. The fork inherits this session's context, so it does not need to re-read tasks.md/plan.md from scratch, but the prompt must still explicitly name which task(s) it owns so it doesn't guess.
    - Instruct each fork to implement its task(s) and run/verify the corresponding tests, but explicitly **not** to edit tasks.md itself — marking tasks complete happens only in this main session after the batch returns, to avoid concurrent writes corrupting the file.
    - Wait for every fork in a batch to finish before dispatching the next batch or moving on to the next phase.
 
@@ -169,6 +171,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Core development**: Implement models, services, CLI commands, endpoints
    - **Integration work**: Database connections, middleware, logging, external services
    - **Polish and validation**: Unit tests, performance optimization, documentation
+   - **Design ID stamping**: When a task carries Design IDs (a `**Design Refs:**` field, or a Convergence-phase item's trailing `[Design: ...]` marker), add each listed ID as a short inline comment (using the target language's comment syntax) at the point in the file that implements it — e.g. `// SCR-014` above a component, `# API-023` above a route handler. This is the only place the ID→file link is recorded; there is no separate mapping file, so don't skip it and don't add a comment for an ID the task didn't list.
 
 8. Progress tracking and error handling:
    - Report progress after each completed sequential task and after each completed fork batch

@@ -28,6 +28,8 @@ Each task is its own subsection:
 **Interfaces:**
 - Produces: <what later tasks rely on, if anything>
 
+**Design Refs:** SCR-014, API-023
+
 - [ ] <what to do>
 ```
 
@@ -35,6 +37,7 @@ Each task is its own subsection:
 - **Parallel**: `yes` if this task can run in parallel with sibling tasks in the same phase (different files, no dependency on an incomplete task in this phase); omit the field entirely when the task is not parallel-safe.
 - **Files**: exact paths this task creates or modifies.
 - **Interfaces**: only include when a later task needs to know a name/signature this task introduces (e.g. a model class a service task will import). Omit entirely for tasks nothing else depends on.
+- **Design Refs**: comma-separated Design IDs (`SCR-`, `API-`, `RDB-`, `MDB-`, `OBJ-`, `EVT-`, `SEC-`, `INF-`, `OPS-`) from the project's `docs/` design documents that this task implements. Omit entirely when nothing in `docs/` has an assigned ID for what this task builds.
 
 ## Path Conventions
 
