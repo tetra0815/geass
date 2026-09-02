@@ -73,7 +73,7 @@ Given that feature description, do this:
    - Gather design-doc context from two sources — `design-spec` does not commit its output, so in the common case (design-spec then specify in the same session) the docs are still uncommitted/untracked, and a plain committed-history diff won't see them:
      1. Committed changes: `git diff BASE_BRANCH...HEAD -- <the design-doc directories that exist>` (triple-dot: diffs against the merge-base, so later changes to `BASE_BRANCH` itself don't pollute the result).
      2. Uncommitted changes: `git status --porcelain -- <the design-doc directories that exist>`. For each path listed (modified, staged, or untracked), read its current file content directly — `git diff` never shows untracked files, and for a brand-new file the current content *is* the relevant context anyway.
-   - If either source produced content, hold onto it as the design-doc context for step 2 (short name) below, and for steps 7 (extracting concepts, entities, and requirements) and 8 (writing the spec). Use it to understand *what* was designed (entities, endpoints, screens, error cases) — do **not** copy implementation details (schema types, endpoint paths, HTTP methods, table/key names) into the spec itself; the Quick Guidelines below still apply.
+   - If either source produced content, hold onto it as the design-doc context for step 2 (short name) below, and for steps 7 (the dialogue) and 9 (writing the spec). Use it to understand *what* was designed (entities, endpoints, screens, error cases) — do **not** copy implementation details (schema types, endpoint paths, HTTP methods, table/key names) into the spec itself; the Quick Guidelines below still apply.
    - If both sources are empty, skip silently — there's no fresh design context to incorporate, proceed to step 2 using the feature description alone.
 
 2. **Generate a concise short name** (2-4 words) for the feature:
@@ -133,127 +133,98 @@ Given that feature description, do this:
 
 6. **IF EXISTS**: Load `.geass/memory/constitution.md` for project principles and governance constraints.
 
-7. Follow this execution flow:
-    1. Parse user description from arguments
-       If empty AND no design-doc context was loaded in step 1: ERROR "No feature description provided"
-       If empty but design-doc context was loaded in step 1: proceed using that context as the description's substitute — it already grounds actors, entities, and requirements
-    2. Extract key concepts from description
-       Identify: actors, actions, data, constraints
-       If design-doc context was loaded in step 1, cross-reference it here — entities, endpoints, and screens already designed are a strong signal for actors/actions/data
-    3. For unclear aspects:
-       - Make informed guesses based on context and industry standards
-       - Only mark with [NEEDS CLARIFICATION: specific question] if:
-         - The choice significantly impacts feature scope or user experience
-         - Multiple reasonable interpretations exist with different implications
-         - No reasonable default exists
-       - **LIMIT: Maximum 3 [NEEDS CLARIFICATION] markers total**
-       - Prioritize clarifications by impact: scope > security/privacy > user experience > technical details
-    4. Fill User Scenarios & Testing section
-       If no clear user flow: ERROR "Cannot determine user scenarios"
-    5. Generate Functional Requirements
-       Each requirement must be testable
-       Use reasonable defaults for unspecified details (document assumptions in Assumptions section)
-    6. Define Success Criteria
-       Create measurable, technology-agnostic outcomes
-       Include both quantitative metrics (time, performance, volume) and qualitative measures (user satisfaction, task completion)
-       Each criterion must be verifiable without implementation details
-    7. Identify Key Entities (if data involved)
-       If design-doc context was loaded in step 1, name entities consistently with what's already in `docs/schema/` rather than inventing parallel names
-    8. Return: SUCCESS (spec ready for planning)
+7. **Dialogue-Driven Understanding**: Build the spec through conversation instead of generating it in one pass and patching gaps afterward.
 
-8. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) and, where loaded, the design-doc context from step 1, while preserving section order and headings.
+   a. **Parse & extract**: From the feature description and, where loaded, the design-doc context from step 1, pull out what's already known — actors, actions, data, constraints, entities. If design-doc context was loaded, cross-reference it here: entities, endpoints, and screens already designed are a strong signal for actors/actions/data.
 
-9. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
+      If the feature description is empty AND no design-doc context was loaded in step 1: ask the user to describe the feature and wait for a reply before continuing.
 
-   a. **Create Spec Quality Checklist**: Generate a checklist file at `SPECIFY_FEATURE_DIRECTORY/checklists/requirements.md` using the checklist template structure with these validation items:
+   b. **Scan for gaps**, marking each category Clear / Partial / Missing based on what step (a) surfaced:
+      - Functional scope & behavior (core user goals, explicit out-of-scope, user roles/personas)
+      - Domain & data model (entities, attributes, relationships, lifecycle)
+      - Interaction & UX flow (critical journeys, error/empty/loading states)
+      - Edge cases & failure handling (negative scenarios, conflict resolution)
+      - Constraints & tradeoffs (scope-level — not tech stack/implementation)
+      - Terminology (canonical names, avoided synonyms)
+      - Completion signals (what "done" and "testable" mean for this feature)
 
-      ```markdown
-      # Specification Quality Checklist: [FEATURE NAME]
+   c. **Build a question queue** from Partial/Missing categories, prioritized scope > security/privacy > user experience > technical details. Skip a category where a reasonable default exists (industry standard, common pattern for this kind of app) — use the default and record it in Assumptions later instead of asking about it. There is no fixed cap on question count, but don't ask about anything a reasonable default already covers — every question must be one whose answer would meaningfully change scope, requirements, or acceptance criteria.
 
-      **Purpose**: Validate specification completeness and quality before proceeding to planning
-      **Created**: [DATE]
-      **Feature**: [Link to spec.md]
+   d. **Ask one question at a time**:
+      - Lead with `**Question:**` followed by a full interrogative ending in "?", then one sentence on why it matters (impact on scope/UX/architecture)
+      - Multiple choice when a discrete set of reasonable answers exists: state a `**Recommended:** Option X — <reasoning>`, then render the options as a table, and let the user reply with a letter or accept the recommendation with "yes"
+      - Short-answer when no discrete options exist: state a `**Suggested:** <answer> — <reasoning>` and let the user accept with "yes" or override
+      - After each accepted answer, fold it into your working understanding before deciding the next question — an earlier answer often makes a queued question moot; drop it rather than asking it anyway
 
-      ## Content Quality
+   e. **Stop asking** when the queue is empty, remaining gaps are low-impact enough for a reasonable default, or the user signals to move on ("done", "looks good", "just write it"). Record any remaining low-impact gaps as Assumptions rather than leaving them unresolved or reaching for a [NEEDS CLARIFICATION] marker — this dialogue *is* the clarification step, so none should remain by the time you write the spec.
 
-      - [ ] No implementation details (languages, frameworks, APIs)
-      - [ ] Focused on user value and business needs
-      - [ ] Written for non-technical stakeholders
-      - [ ] All mandatory sections completed
+8. **Present the draft, then get approval before writing anything**: Once understanding is sufficient, summarize the spec content in chat, section by section (scaled to complexity — a few sentences if straightforward):
+   - User Scenarios (prioritized user stories, acceptance scenarios, edge cases)
+   - Functional Requirements & Key Entities
+   - Success Criteria
+   - Assumptions (the defaults used instead of asking)
 
-      ## Requirement Completeness
+   Ask after each section whether it looks right, and revise in chat if not. Do **not** write `SPEC_FILE` until the user has given explicit approval of the whole draft (a short "looks good" / "yes" / equivalent is enough) — do not infer approval from silence or from the user answering a different question.
 
-      - [ ] No [NEEDS CLARIFICATION] markers remain
-      - [ ] Requirements are testable and unambiguous
-      - [ ] Success criteria are measurable
-      - [ ] Success criteria are technology-agnostic (no implementation details)
-      - [ ] All acceptance scenarios are defined
-      - [ ] Edge cases are identified
-      - [ ] Scope is clearly bounded
-      - [ ] Dependencies and assumptions identified
+9. Write the approved draft to `SPEC_FILE` using the template structure loaded in step 5, preserving section order and headings. No `[NEEDS CLARIFICATION]` markers should remain — every ambiguity was either resolved in step 7's dialogue or captured as a documented Assumption.
 
-      ## Feature Readiness
+10. **Specification Quality Validation**: After writing the spec, validate it against quality criteria:
 
-      - [ ] All functional requirements have clear acceptance criteria
-      - [ ] User scenarios cover primary flows
-      - [ ] Feature meets measurable outcomes defined in Success Criteria
-      - [ ] No implementation details leak into specification
+    a. **Create Spec Quality Checklist**: Generate a checklist file at `SPECIFY_FEATURE_DIRECTORY/checklists/requirements.md` using the checklist template structure with these validation items:
 
-      ## Notes
+       ```markdown
+       # Specification Quality Checklist: [FEATURE NAME]
 
-      - Items marked incomplete require spec updates before `/clarify` or `/plan`
-      ```
+       **Purpose**: Validate specification completeness and quality before proceeding to planning
+       **Created**: [DATE]
+       **Feature**: [Link to spec.md]
 
-   b. **Run Validation Check**: Review the spec against each checklist item:
-      - For each item, determine if it passes or fails
-      - Document specific issues found (quote relevant spec sections)
+       ## Content Quality
 
-   c. **Handle Validation Results**:
+       - [ ] No implementation details (languages, frameworks, APIs)
+       - [ ] Focused on user value and business needs
+       - [ ] Written for non-technical stakeholders
+       - [ ] All mandatory sections completed
 
-      - **If all items pass**: Mark checklist complete and proceed to the Mandatory Post-Execution Hooks section
+       ## Requirement Completeness
 
-      - **If items fail (excluding [NEEDS CLARIFICATION])**:
-        1. List the failing items and specific issues
-        2. Update the spec to address each issue
-        3. Re-run validation until all items pass (max 3 iterations)
-        4. If still failing after 3 iterations, document remaining issues in checklist notes and warn user
+       - [ ] No [NEEDS CLARIFICATION] markers remain
+       - [ ] Requirements are testable and unambiguous
+       - [ ] Success criteria are measurable
+       - [ ] Success criteria are technology-agnostic (no implementation details)
+       - [ ] All acceptance scenarios are defined
+       - [ ] Edge cases are identified
+       - [ ] Scope is clearly bounded
+       - [ ] Dependencies and assumptions identified
 
-      - **If [NEEDS CLARIFICATION] markers remain**:
-        1. Extract all [NEEDS CLARIFICATION: ...] markers from the spec
-        2. **LIMIT CHECK**: If more than 3 markers exist, keep only the 3 most critical (by scope/security/UX impact) and make informed guesses for the rest
-        3. For each clarification needed (max 3), present options to user in this format:
+       ## Feature Readiness
 
-           ```markdown
-           ## Question [N]: [Topic]
+       - [ ] All functional requirements have clear acceptance criteria
+       - [ ] User scenarios cover primary flows
+       - [ ] Feature meets measurable outcomes defined in Success Criteria
+       - [ ] No implementation details leak into specification
 
-           **Context**: [Quote relevant spec section]
+       ## Notes
 
-           **What we need to know**: [Specific question from NEEDS CLARIFICATION marker]
+       - Items marked incomplete require spec updates before `/plan`
+       ```
 
-           **Suggested Answers**:
+    b. **Run Validation Check**: Review the spec against each checklist item:
+       - For each item, determine if it passes or fails
+       - Document specific issues found (quote relevant spec sections)
 
-           | Option | Answer | Implications |
-           |--------|--------|--------------|
-           | A      | [First suggested answer] | [What this means for the feature] |
-           | B      | [Second suggested answer] | [What this means for the feature] |
-           | C      | [Third suggested answer] | [What this means for the feature] |
-           | Custom | Provide your own answer | [Explain how to provide custom input] |
+    c. **Handle Validation Results**:
 
-           **Your choice**: _[Wait for user response]_
-           ```
+       - **If all items pass**: Mark checklist complete and proceed to the Mandatory Post-Execution Hooks section
 
-        4. **CRITICAL - Table Formatting**: Ensure markdown tables are properly formatted:
-           - Use consistent spacing with pipes aligned
-           - Each cell should have spaces around content: `| Content |` not `|Content|`
-           - Header separator must have at least 3 dashes: `|--------|`
-           - Test that the table renders correctly in markdown preview
-        5. Number questions sequentially (Q1, Q2, Q3 - max 3 total)
-        6. Present all questions together before waiting for responses
-        7. Wait for user to respond with their choices for all questions (e.g., "Q1: A, Q2: Custom - [details], Q3: B")
-        8. Update the spec by replacing each [NEEDS CLARIFICATION] marker with the user's selected or provided answer
-        9. Re-run validation after all clarifications are resolved
+       - **If items fail**:
+         1. List the failing items and specific issues
+         2. If the fix is unambiguous (e.g., an implementation detail leaked in, a requirement needs rewording to be testable), fix it directly in the spec
+         3. If the fix requires a decision only the user can make, ask one question about it (same format as step 7d) instead of guessing — validation failures can surface gaps the dialogue missed
+         4. Re-run validation until all items pass (max 3 iterations)
+         5. If still failing after 3 iterations, document remaining issues in checklist notes and warn user
 
-   d. **Update Checklist**: After each validation iteration, update the checklist file with current pass/fail status
+    d. **Update Checklist**: After each validation iteration, update the checklist file with current pass/fail status
 
 ## Mandatory Post-Execution Hooks
 
@@ -296,7 +267,7 @@ Report completion to the user with:
 - `SPECIFY_FEATURE_DIRECTORY` — the feature directory path
 - `SPEC_FILE` — the spec file path
 - Checklist results summary
-- Readiness for the next phase (`/clarify` or `/plan`)
+- Readiness for the next phase (`/plan`)
 
 **NOTE:** Branch creation is handled by the `before_specify` hook (git extension). Spec directory and file creation are always handled by this core command.
 
@@ -317,9 +288,9 @@ Report completion to the user with:
 
 When creating this spec from a user prompt:
 
-1. **Make informed guesses**: Use context, industry standards, and common patterns to fill gaps
+1. **Make informed guesses**: Use context, industry standards, and common patterns to fill gaps rather than asking about them
 2. **Document assumptions**: Record reasonable defaults in the Assumptions section
-3. **Limit clarifications**: Maximum 3 [NEEDS CLARIFICATION] markers - use only for critical decisions that:
+3. **Resolve ambiguity through dialogue, not markers**: Ask about it in step 7 instead of leaving a [NEEDS CLARIFICATION] marker in the written spec — reserve a question for decisions that:
    - Significantly impact feature scope or user experience
    - Have multiple reasonable interpretations with different implications
    - Lack any reasonable default
@@ -363,6 +334,8 @@ Success criteria must be:
 
 ## Done When
 
+- [ ] Ambiguities resolved through one-at-a-time dialogue (step 7), not left as [NEEDS CLARIFICATION] markers
+- [ ] Draft presented in chat and explicitly approved by the user before writing to disk
 - [ ] Specification written to `SPEC_FILE` and validated against quality checklist
 - [ ] Extension hooks dispatched or skipped according to the rules in Mandatory Post-Execution Hooks above
 - [ ] Completion reported to user with feature directory, spec file path, and checklist results

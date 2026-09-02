@@ -3,7 +3,7 @@
 Self-contained spec-driven development harness for Claude Code.
 
 A full fork of [spec-kit](https://github.com/github/spec-kit)'s spec-driven
-pipeline (design-spec → specify → clarify → plan → tasks → analyze, plus
+pipeline (design-spec → specify → plan → tasks → analyze, plus
 checklist, constitution, converge, implement, and taskstoissues) combined
 with a git-flow feature/fix worktree dispatcher. No spec-kit installation
 is required — every script and template geass needs ships inside the plugin
@@ -37,10 +37,12 @@ dispatched automatically instead of by hand.
   there.
 - Inside a feature worktree, the pipeline is `/design-spec` (writes schema,
   API, security, infrastructure, testing, operations, and client design
-  docs, then hands off to `/specify` in the same session) → `/clarify` →
-  `/plan` → `/tasks` → `/analyze`, plus `/checklist`, `/constitution`,
-  `/converge`, `/implement`, and `/taskstoissues`. `/design-spec` and
-  `/specify` are also usable standalone at any time.
+  docs, then hands off to `/specify` in the same session) → `/plan` →
+  `/tasks` → `/analyze`, plus `/checklist`, `/constitution`,
+  `/converge`, `/implement`, and `/taskstoissues`. `/specify` builds the
+  spec through one-question-at-a-time dialogue and asks for explicit
+  approval of the draft before writing it. `/design-spec` and `/specify`
+  are also usable standalone at any time.
 
 ## Configuration
 
@@ -49,7 +51,6 @@ Add to `.geass/init-options.json` in your project:
 | Key | Default | Meaning |
 |---|---|---|
 | `terminal_multiplexer` | `"wezterm"` | `"wezterm"` or `"tmux"` |
-| `enforce_clarify_before_plan` | `true` | Require `/clarify` before `/plan` |
 | `require_analyze_before_execute` | `true` | Require `/analyze` before `executing-plans`/`subagent-driven-development` |
 | `feature_numbering` | `"sequential"` | `"sequential"` (`NNN-name`) or `"timestamp"` (`YYYYMMDD-HHMMSS-name`) |
 
