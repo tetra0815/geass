@@ -1,6 +1,6 @@
 ---
 name: "feature-start"
-description: "Create a dedicated branch and git worktree for a new feature, open a tracking GitHub issue, open a new WezTerm tab, and hand off to /design-spec there (which itself hands off to /specify once design docs are written)."
+description: "Create a dedicated branch and git worktree for a new feature, open a tracking GitHub issue, open a new WezTerm tab, and hand off to /rdra (when require_rdra_approval is set) or /design-spec there (which itself hands off to /specify once design docs are written)."
 argument-hint: "Describe the feature you want to specify"
 compatibility: "Requires a .geass/ project directory, git flow, and WezTerm or tmux"
 metadata:
@@ -44,7 +44,7 @@ the hook not firing for some reason) and fails loudly if it doesn't hold.
    ```
    Pass `$ARGUMENTS` unmodified (in its original language) after `--slug
    $SHORT_NAME` — it still drives the GitHub issue title/body and the
-   `/design-spec` handoff prompt below; only the branch/worktree naming
+   hand-off prompt below; only the branch/worktree naming
    needs the English override.
 3. If the script exits non-zero: report its stderr output to the user verbatim
    and STOP. Do not retry automatically, do not create any files yourself.
@@ -58,10 +58,13 @@ the hook not firing for some reason) and fails loudly if it doesn't hold.
      current HEAD (the new worktree checks out a new branch; the root
      worktree's own branch is unaffected beyond the fast-forward pull above)
    - Created a git worktree at `WORKTREE_PATH`
+   - Recorded `BASE_COMMIT` as `git config branch.<BRANCH_NAME>.geass-base-commit`,
+     which the rdra server uses as the baseline for the feature's RDRA diff
    - Written `WORKTREE_PATH/.claude/settings.local.json` pinning that worktree
      to the Sonnet model
    - Opened a new WezTerm tab, cd'd into `WORKTREE_PATH`, and launched `claude`
-     there with a prompt that runs `/design-spec` using
+     there with a prompt that runs `/rdra` if `require_rdra_approval` is true
+     in `.geass/init-options.json`, otherwise `/design-spec`, using
      `SPECIFY_FEATURE_DIRECTORY=SPEC_DIR` (already decided — the new session
      must not recompute the feature name)
 

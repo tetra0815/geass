@@ -301,6 +301,17 @@ A document with nothing open skips the gate entirely — go straight to writing 
 
 ### Step 1: Confirm prerequisites
 - **IF EXISTS**: load `.geass/memory/constitution.md` to understand the project's principles and governance constraints (same loading method as the `specify` skill)
+- **IF `docs/rdra/` EXISTS**: load the RDRA model with the `rdra` MCP server's `rdra_diff` (what this feature changed) and `rdra_get_model` (the whole system). When `require_rdra_approval` is on, a human has already reviewed and approved this model — treat it as settled input, not as an open decision for the Design Decision Gate. Map it onto the documents below:
+
+  | RDRA elements | Documents they drive |
+  |---|---|
+  | Information, state models (states and transitions) | `docs/schema/` — entities, attributes, state columns and allowed transitions |
+  | Screens, and the usecases that use each screen | `docs/client/` — screens and UI flow; a screen's usecases are its actions |
+  | Events, external systems | `docs/api/` — integrations and `data-flow.md` |
+  | Usecases' information access (`create` / `read` / `update` / `delete`) and actors | `docs/api/` endpoints, `docs/security/` access-control matrix |
+
+  Where a design unit implements an RDRA element, write the RDRA id next to its Design ID (e.g. `### 注文確認画面 (SCR-014, scr.order-confirm)`), so the chain RDRA → design doc → task → code stays traceable.
+- If designing reveals that the RDRA model itself must change (a missing screen, an unmodeled piece of information), stop and tell the user to run `/rdra` — changing the model after approval invalidates the approval, and the gate will block the next step until it is reviewed again.
 - Confirm the tech stack and architecture patterns are settled — treat that choice as a given input to the design docs, not something to justify. Document what the settled choice is and how it's used; don't add rationale/comparison prose for why it was picked, in `infrastructure-as-code.md` or elsewhere, unless a section explicitly asks for it (e.g. `client-architecture.md`'s tooling-rationale bullet)
 
 ### Step 2-7: Produce documents
