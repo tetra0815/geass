@@ -58,7 +58,14 @@ async function checkApproval(repo: string, featureDir: string, io: CliIo): Promi
     io.out(JSON.stringify({ state: "error", message: `RDRA の YAML を読めません: ${e.message}` }) + "\n");
     return 3;
   }
-  const state = approvalState(await readReview(featureDir), modelHash(model));
+  let review;
+  try {
+    review = await readReview(featureDir);
+  } catch (e) {
+    io.out(JSON.stringify({ state: "error", message: `rdra-review.json を読めません: ${(e as Error).message}` }) + "\n");
+    return 3;
+  }
+  const state = approvalState(review, modelHash(model));
   const result: { state: string; message: string; changed?: string[] } = { state: state.state, message: MESSAGES[state.state] };
   if (state.state === "stale") {
     const changed = await changedSinceApproval(repo, featureDir, model);
@@ -78,7 +85,13 @@ async function safeRead(featureDir: string): Promise<ReviewRecord | null> {
 
 async function waitReview(featureDir: string, intervalMs: number, timeoutSec: number, io: CliIo): Promise<number> {
   const sleep = io.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const initial = await readReview(featureDir);
+  let initial;
+  try {
+    initial = await readReview(featureDir);
+  } catch (e) {
+    io.out(JSON.stringify({ state: "error", message: `rdra-review.json を読めません: ${(e as Error).message}` }) + "\n");
+    return 3;
+  }
   if (initial.status !== "pending") {
     io.out(JSON.stringify({ status: initial.status, message: "レビュー待ちではありません" }) + "\n");
     return 2;
@@ -124,8 +137,14 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     return waitReview(featureDir, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
   }
   if (command === "hash" && repo) {
-    io.out(modelHash(await loadModel(repo)) + "\n");
-    return 0;
+    try {
+      io.out(modelHash(await loadModel(repo)) + "\n");
+      return 0;
+    } catch (e) {
+      if (!(e instanceof ModelParseError)) throw e;
+      io.err(`RDRA の YAML を読めません: ${e.message}\n`);
+      return 3;
+    }
   }
   io.err(USAGE);
   return 64;

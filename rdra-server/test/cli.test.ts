@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../src/cli.js";
@@ -63,6 +63,17 @@ describe("check-approval", () => {
     const repo = await makeRepo({ [`${RDRA_DIR}/actors.yaml`]: "- id: [\n" });
     expect(await check(repo, join(repo, "specs/001-demo"))).toMatchObject({ code: 3, result: { state: "error" } });
   });
+
+  it("exits 3 on corrupted review file", async () => {
+    const repo = await makeRepo(rdraFiles());
+    const fd = join(repo, "specs/001-demo");
+    await mkdir(fd, { recursive: true });
+    await writeFile(join(fd, "rdra-review.json"), "{ not json");
+    const result = await check(repo, fd);
+    expect(result.code).toBe(3);
+    expect(result.result.state).toBe("error");
+    expect(result.result.message).toContain("rdra-review.json を読めません");
+  });
 });
 
 describe("wait-review", () => {
@@ -97,6 +108,19 @@ describe("wait-review", () => {
     c.io.sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     expect(await runCli(["wait-review", "--repo", repo, "--feature-dir", fd, "--interval-ms", "10", "--timeout-sec", "0.05"], c.io)).toBe(124);
   });
+
+  it("exits 3 on corrupted review file", async () => {
+    const repo = await makeRepo();
+    const fd = join(repo, "specs/001-demo");
+    await mkdir(fd, { recursive: true });
+    await writeFile(join(fd, "rdra-review.json"), "{ not json");
+    const c = capture();
+    const code = await runCli(["wait-review", "--repo", repo, "--feature-dir", fd], c.io);
+    expect(code).toBe(3);
+    const result = JSON.parse(c.out.join(""));
+    expect(result.state).toBe("error");
+    expect(result.message).toContain("rdra-review.json を読めません");
+  });
 });
 
 describe("usage", () => {
@@ -107,5 +131,13 @@ describe("usage", () => {
     expect(c.out.join("").trim()).toBe(modelHash(sampleModel()));
     expect(await runCli(["nope"], capture().io)).toBe(64);
     expect(await runCli(["check-approval", "--repo", repo], capture().io)).toBe(64);
+  });
+
+  it("hash exits 3 on YAML errors", async () => {
+    const repo = await makeRepo({ [`${RDRA_DIR}/actors.yaml`]: "- id: [\n" });
+    const c = capture();
+    const code = await runCli(["hash", "--repo", repo], c.io);
+    expect(code).toBe(3);
+    expect(c.err.join("")).toContain("YAML");
   });
 });
