@@ -16,7 +16,7 @@ export const KIND_KEYS = [
 export type KindKey = (typeof KIND_KEYS)[number];
 
 function idSchema(prefix: string) {
-  return z.string().regex(new RegExp(`^${prefix}\\.${SLUG}$`), `id must look like ${prefix}.<slug>`);
+  return z.string().regex(new RegExp(`^${prefix}\\.${SLUG}$`), `id は ${prefix}.<スラッグ> の形式にしてください`);
 }
 
 function common(prefix: string) {
@@ -58,7 +58,7 @@ export const StateModelSchema = z.strictObject({
   ...common("st"),
   information: z.string().nullish(),
   states: z
-    .array(z.strictObject({ id: z.string().regex(slugPattern, "state id must be a slug"), name: z.string().min(1) }))
+    .array(z.strictObject({ id: z.string().regex(slugPattern, "状態の id はスラッグ（英小文字・数字・ハイフン）にしてください"), name: z.string().min(1) }))
     .default(() => []),
   transitions: z.array(z.strictObject({ from: z.string(), to: z.string() })).default(() => []),
 });
