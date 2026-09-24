@@ -53,6 +53,7 @@ BASE_COMMIT=$(git rev-parse HEAD)
 # directory.
 mkdir -p "$REPO_ROOT/.claude/worktrees"
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" "$BASE_COMMIT"
+record_base_commit "$REPO_ROOT" "$BRANCH_NAME" "$BASE_COMMIT"
 
 mkdir -p "$WORKTREE_PATH/.claude"
 cat > "$WORKTREE_PATH/.claude/settings.local.json" <<SETTINGSEOF
@@ -61,7 +62,8 @@ cat > "$WORKTREE_PATH/.claude/settings.local.json" <<SETTINGSEOF
 }
 SETTINGSEOF
 
-PROMPT="SPECIFY_FEATURE_DIRECTORY=$SPEC_DIR is already decided -- use it as-is, do not recompute the feature name. /design-spec $FEATURE_DESCRIPTION"
+HANDOFF=$(feature_handoff_command "$REPO_ROOT")
+PROMPT="SPECIFY_FEATURE_DIRECTORY=$SPEC_DIR is already decided -- use it as-is, do not recompute the feature name. $HANDOFF $FEATURE_DESCRIPTION"
 
 spawn_claude_tab "$REPO_ROOT" "$WORKTREE_PATH" "$PROMPT"
 

@@ -47,6 +47,36 @@ print(v if v else '')
     return 0
 }
 
+# Succeed when require_rdra_approval is true in .geass/init-options.json.
+# read_init_option prints jq's "true" or Python's "True" depending on which
+# parser it fell through to, so accept both.
+rdra_approval_required() {
+    local val
+    val=$(read_init_option "$1" "require_rdra_approval")
+    [[ "$val" == "true" || "$val" == "True" ]]
+}
+
+# Print the skill a new feature session starts with: /rdra when RDRA
+# approval is required, otherwise /design-spec.
+feature_handoff_command() {
+    if rdra_approval_required "$1"; then
+        printf '%s' "/rdra"
+    else
+        printf '%s' "/design-spec"
+    fi
+}
+
+# Record the commit a feature branch was cut from, so rdra-server can diff
+# the RDRA model against it. Stored in git config (shared by every worktree)
+# rather than .geass/feature.json, which _persist_feature_json rewrites with
+# feature_directory only.
+record_base_commit() {
+    local repo_root="$1"
+    local branch="$2"
+    local commit="$3"
+    git -C "$repo_root" config "branch.$branch.geass-base-commit" "$commit"
+}
+
 # Return the configured terminal multiplexer ("wezterm" or "tmux"),
 # defaulting to "wezterm" when terminal_multiplexer is unset.
 terminal_multiplexer() {
