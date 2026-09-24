@@ -107,7 +107,7 @@ docs/rdra/
 # events.yaml
 - id: evt.payment-request
   name: 決済依頼
-  source: null                             # 省略可。act / ext のいずれか（システム外からの発生元）
+  # source: act.xxx / ext.xxx           # 省略可。システム外からの発生元
   target: ext.payment-gateway              # 省略可。act / ext のいずれか（システム外の送り先）
   # ユースケースとの関連は usecases.yaml の events 側にだけ書く
 
@@ -133,8 +133,8 @@ docs/rdra/
 
 ### 3.4 差分の基準
 
-- 基準は feature ブランチの分岐点コミット。`create-feature-worktree.sh` が作成した worktree の `.geass/feature.json` に `base_commit` を保存するよう変更する（現状は標準出力に表示するだけで保存されていない）。
-- `base_commit` がない場合（`/feature-start` を経ずに作業している場合）は、`git merge-base HEAD <ルート worktree のブランチ>` で求める。それも失敗した場合は差分機能だけを無効にする。
+- 基準は feature ブランチの分岐点コミット。`create-feature-worktree.sh` がブランチ作成時に `git config branch.<ブランチ名>.geass-base-commit <コミット>` として保存するよう変更する（現状は標準出力に表示するだけで保存されていない。`.geass/feature.json` は既存の `_persist_feature_json` が `feature_directory` だけで上書きするため保存先に使わない）。
+- この設定がない場合（`/feature-start` を経ずに作業している場合）は、`git merge-base HEAD <ルート worktree のブランチ>` で求める。それも失敗した場合は差分機能だけを無効にする。
 - ベース側のモデルは `git show <base>:docs/rdra/<file>` で読む。ベースに `docs/rdra/` がなければ空のモデルとみなす。
 - 差分は要素単位で計算する: 追加 / 削除 / 変更（どのフィールド、どの関連が変わったか）。
 
@@ -158,7 +158,7 @@ docs/rdra/
 - 対象は作業ディレクトリの git ルート。Claude のセッション、worktree、サーバーが 1 対 1 対 1 で対応する。
 - HTTP ポートは空きを動的に割り当て、`127.0.0.1` にのみバインドする。
 - `docs/rdra/` がなくても起動し、最初の書き込み時に作る。
-- Node 22 未満では明確なエラーメッセージを出して終了する（SQLite に `node:sqlite` を使うため）。
+- Node 22.13 未満では明確なエラーメッセージを出して終了する（SQLite に `node:sqlite` を使うため）。
 
 ### 4.2 モジュール
 
@@ -264,10 +264,11 @@ React + React Flow。レイアウトの自動配置に elkjs。Vite でビルド
 
 ### 7.2 `/feature-start`
 
-有効時は、新しいタブで `/design-spec` の代わりに `/rdra` を起動する。引き継ぐ情報（`SPECIFY_FEATURE_DIRECTORY`、機能の説明）は現在と同じ。あわせて 3.4 のとおり `base_commit` を worktree の `.geass/feature.json` に保存する。
+有効時は、新しいタブで `/design-spec` の代わりに `/rdra` を起動する。引き継ぐ情報（`SPECIFY_FEATURE_DIRECTORY`、機能の説明）は現在と同じ。あわせて 3.4 のとおり分岐点コミットを `git config branch.<ブランチ名>.geass-base-commit` に保存する。
 
 ### 7.3 新スキル `/rdra`
 
+0. `SPECIFY_FEATURE_DIRECTORY` が引き継がれていれば、それを `.geass/feature.json` の `feature_directory` に保存する（`/specify` と同じ形式）。これがないと、ゲートと rdra-server が feature を特定できず、ゲートが「feature の外」として素通しになるため。
 1. `rdra_review_status` を確認する。差し戻しのコメントがあれば、それへの対応から始める。
 2. `rdra_get_model` と `rdra_diff` で現状を把握する。
 3. `/specify` と同様に 1 問ずつ対話し、外側から内側へ（アクター・外部システム → BUC → ユースケース → 画面・イベント → 情報 → 状態）モデルを MCP ツールで組み立てる。
@@ -300,10 +301,12 @@ spec のユーザーストーリーには対応するユースケースの ID（
 | 承認済みで、現在のハッシュと一致 | 通す |
 | 未依頼 / 待機中 / 差し戻し | 「`/rdra` でレビューを完了してください」としてブロック |
 | 承認後に変更あり | 「承認後に RDRA が変更されました。再レビューが必要です」としてブロックし、変更された要素を示す |
-| Node が使えない、CLI が失敗した | 「Node 22 以上が必要です」などの理由を示してブロック（確認できないまま通さない） |
+| Node が使えない、CLI が失敗した | 「Node 22.13 以上が必要です」などの理由を示してブロック（確認できないまま通さない） |
 | feature の外（`check-prerequisites.sh` が失敗） | 通す（既存のゲートと同じ扱い） |
 
 実装中に要件の変更が必要になったら、`/rdra` を再実行して再承認を得ればゲートが解除される。
+
+承認記録の保護: 承認と差し戻しは Web 画面からだけ行えるようにし、MCP には承認するツールを用意しない。さらに有効時は、`Edit` / `Write` / `MultiEdit` で `rdra-review.json` を書き換えようとする操作をゲートで拒否する。Bash などから直接書き換える経路までは防がない（既知の制約）。
 
 ## 8. エラー処理
 
@@ -313,7 +316,7 @@ spec のユーザーストーリーには対応するユースケースの ID（
 | 存在しない ID への参照を生む操作 | 操作を拒否し、ファイルは変更しない |
 | Web の編集が古いバージョンに基づく | 409。画面は最新を読み直して通知する |
 | ベースコミットが取れない | 差分機能だけを無効にする |
-| Node 22 未満 / 未インストール | MCP サーバーは終了。有効なプロジェクトではゲートがブロックする |
+| Node 22.13 未満 / 未インストール | MCP サーバーは終了。有効なプロジェクトではゲートがブロックする |
 | `wait-review` の待機中にセッションが終了 | 記録はファイルに残る。`/rdra` の再実行時に手順 1 で状態を引き継ぐ |
 
 ## 9. テスト
@@ -332,5 +335,5 @@ spec のユーザーストーリーには対応するユースケースの ID（
 - `rdra-server/` に TypeScript のソースとビルド済みの `dist/` を置く。`dist/` には esbuild で 1 ファイルにまとめたサーバーと CLI、Vite でビルドした Web アプリを含める。plugin の利用者は `npm install` を必要としない。
 - plugin の `.mcp.json` にサーバーを登録する。
 - `dist/` の更新漏れを防ぐため、CI で `npm run build` 後に差分が出ないことを確認する。
-- README に `require_rdra_approval` と Node 22 以上の要件を追記する。
+- README に `require_rdra_approval` と Node 22.13 以上の要件を追記する。
 - バージョンは 0.11.0。
