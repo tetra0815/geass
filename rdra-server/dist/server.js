@@ -31898,7 +31898,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes, createHash: createHash2 } = __require("crypto");
+    var { randomBytes: randomBytes2, createHash: createHash2 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -32436,7 +32436,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes(16).toString("base64");
+      const key = randomBytes2(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -33515,7 +33515,8 @@ var init_layout = __esm({
 });
 
 // src/review.ts
-import { mkdir as mkdir3, readFile as readFile4, writeFile as writeFile3 } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir as mkdir3, readFile as readFile4, rename, rm, writeFile as writeFile3 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 function emptyReview() {
   return { status: "none", base_commit: null, approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
@@ -33532,7 +33533,15 @@ async function readReview(featureDir) {
 }
 async function writeReview(featureDir, record2) {
   await mkdir3(featureDir, { recursive: true });
-  await writeFile3(join4(featureDir, REVIEW_FILE), JSON.stringify(record2, null, 2) + "\n", "utf8");
+  const target = join4(featureDir, REVIEW_FILE);
+  const tmp = `${target}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
+  try {
+    await writeFile3(tmp, JSON.stringify(record2, null, 2) + "\n", "utf8");
+    await rename(tmp, target);
+  } catch (e) {
+    await rm(tmp, { force: true });
+    throw e;
+  }
 }
 function requestReview(record2, opts) {
   return {
@@ -49688,11 +49697,14 @@ function createMcpServer(deps) {
         return fail(`\u30A8\u30E9\u30FC\u3092\u89E3\u6D88\u3057\u3066\u304B\u3089\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3057\u3066\u304F\u3060\u3055\u3044:
 ${errors.join("\n")}`);
       }
-      const record2 = requestReview(await readReview(featureDir), {
-        now: now(),
-        baseCommit: await resolveBaseCommit(store.repoRoot)
+      const record2 = await store.exclusive(async () => {
+        const next = requestReview(await readReview(featureDir), {
+          now: now(),
+          baseCommit: await resolveBaseCommit(store.repoRoot)
+        });
+        await writeReview(featureDir, next);
+        return next;
       });
-      await writeReview(featureDir, record2);
       deps.onReviewChange?.();
       return json2({ status: record2.status, url: deps.reviewUrl(), reviewFile: join6(featureDir, REVIEW_FILE) });
     }

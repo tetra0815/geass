@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -24,6 +24,14 @@ describe("review record", () => {
     await writeReview(dir, rec);
     expect(JSON.parse(await readFile(join(dir, REVIEW_FILE), "utf8"))).toEqual(rec);
     expect(await readReview(dir)).toEqual(rec);
+  });
+
+  it("leaves no temporary file behind after writing", async () => {
+    const dir = join(await mkdtemp(join(tmpdir(), "rdra-review-")), "specs", "001-x");
+    await writeReview(dir, requestReview(emptyReview(), { now: T1, baseCommit: "abc" }));
+    await writeReview(dir, requestReview(emptyReview(), { now: T2, baseCommit: "abc" }));
+    expect(await readdir(dir)).toEqual([REVIEW_FILE]);
+    expect((await readReview(dir)).requested_at).toBe(T2);
   });
 
   it("walks through request, reject, request, approve", () => {

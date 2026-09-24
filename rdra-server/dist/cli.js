@@ -28048,7 +28048,8 @@ var init_git = __esm({
 });
 
 // src/review.ts
-import { mkdir as mkdir2, readFile as readFile2, writeFile as writeFile2 } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir as mkdir2, readFile as readFile2, rename, rm, writeFile as writeFile2 } from "node:fs/promises";
 import { join as join2 } from "node:path";
 function emptyReview() {
   return { status: "none", base_commit: null, approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
@@ -28065,7 +28066,15 @@ async function readReview(featureDir) {
 }
 async function writeReview(featureDir, record2) {
   await mkdir2(featureDir, { recursive: true });
-  await writeFile2(join2(featureDir, REVIEW_FILE), JSON.stringify(record2, null, 2) + "\n", "utf8");
+  const target = join2(featureDir, REVIEW_FILE);
+  const tmp = `${target}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
+  try {
+    await writeFile2(tmp, JSON.stringify(record2, null, 2) + "\n", "utf8");
+    await rename(tmp, target);
+  } catch (e) {
+    await rm(tmp, { force: true });
+    throw e;
+  }
 }
 function decide(record2, opts) {
   if (record2.status !== "pending") throw new ReviewError("\u30EC\u30D3\u30E5\u30FC\u304C\u4F9D\u983C\u3055\u308C\u3066\u3044\u307E\u305B\u3093");
@@ -30337,7 +30346,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes, createHash: createHash2 } = __require("crypto");
+    var { randomBytes: randomBytes2, createHash: createHash2 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -30875,7 +30884,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes(16).toString("base64");
+      const key = randomBytes2(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;

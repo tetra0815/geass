@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const REVIEW_FILE = "rdra-review.json";
@@ -55,7 +56,17 @@ export async function readReview(featureDir: string): Promise<ReviewRecord> {
 
 export async function writeReview(featureDir: string, record: ReviewRecord): Promise<void> {
   await mkdir(featureDir, { recursive: true });
-  await writeFile(join(featureDir, REVIEW_FILE), JSON.stringify(record, null, 2) + "\n", "utf8");
+  // Write to a sibling temp file and rename over the target so a reader
+  // (the gate, wait-review) never sees a half-written record.
+  const target = join(featureDir, REVIEW_FILE);
+  const tmp = `${target}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
+  try {
+    await writeFile(tmp, JSON.stringify(record, null, 2) + "\n", "utf8");
+    await rename(tmp, target);
+  } catch (e) {
+    await rm(tmp, { force: true });
+    throw e;
+  }
 }
 
 export function requestReview(record: ReviewRecord, opts: { now: string; baseCommit: string | null }): ReviewRecord {

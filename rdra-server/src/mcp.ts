@@ -153,11 +153,16 @@ export function createMcpServer(deps: McpDeps): McpServer {
         const errors = issues.filter((i) => i.level === "error").map((i) => `- ${i.message}`);
         return fail(`エラーを解消してからレビューを依頼してください:\n${errors.join("\n")}`);
       }
-      const record = requestReview(await readReview(featureDir), {
-        now: now(),
-        baseCommit: await resolveBaseCommit(store.repoRoot),
+      // Read-modify-write under the store lock so it cannot race a decision
+      // arriving from the review UI.
+      const record = await store.exclusive(async () => {
+        const next = requestReview(await readReview(featureDir), {
+          now: now(),
+          baseCommit: await resolveBaseCommit(store.repoRoot),
+        });
+        await writeReview(featureDir, next);
+        return next;
       });
-      await writeReview(featureDir, record);
       deps.onReviewChange?.();
       return json({ status: record.status, url: deps.reviewUrl(), reviewFile: join(featureDir, REVIEW_FILE) });
     },
