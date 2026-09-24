@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { diffModels } from "./diff.js";
+import { diffAgainstBase } from "./base-diff.js";
 import { resolveFeatureDir } from "./feature.js";
-import { readModelFilesAt, resolveBaseCommit } from "./git.js";
-import { ModelParseError, parseModel } from "./model/io.js";
+import { resolveBaseCommit } from "./git.js";
+import { ModelParseError } from "./model/io.js";
 import { KIND_KEYS } from "./model/kinds.js";
 import { RELATION_KINDS } from "./model/relations.js";
 import type { Operation } from "./operations.js";
@@ -20,6 +20,7 @@ export interface McpDeps {
   reviewUrl: () => string | null;
   now?: () => string;
   env?: NodeJS.ProcessEnv;
+  onReviewChange?: () => void;
 }
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
@@ -87,13 +88,12 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_diff",
     { description: "feature ブランチの分岐点と比べた、要素単位の差分。", inputSchema: {} },
     async () => {
-      const base = await resolveBaseCommit(store.repoRoot);
-      if (!base) return json({ base: null, changes: [], note: "比較対象の分岐点コミットが見つからないため、差分は計算できません" });
       try {
-        const baseModel = parseModel(await readModelFilesAt(store.repoRoot, base));
-        return json({ base, changes: diffModels(baseModel, store.model) });
+        const diff = await diffAgainstBase(store.repoRoot, store.model);
+        if (!diff.base) return json({ ...diff, note: "比較対象の分岐点コミットが見つからないため、差分は計算できません" });
+        return json(diff);
       } catch (e) {
-        if (e instanceof ModelParseError) return fail(`分岐点 ${base} の RDRA を読めません: ${e.message}`);
+        if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
         throw e;
       }
     },
@@ -158,6 +158,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
         baseCommit: await resolveBaseCommit(store.repoRoot),
       });
       await writeReview(featureDir, record);
+      deps.onReviewChange?.();
       return json({ status: record.status, url: deps.reviewUrl(), reviewFile: join(featureDir, REVIEW_FILE) });
     },
   );

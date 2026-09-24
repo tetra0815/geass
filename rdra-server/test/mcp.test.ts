@@ -17,10 +17,17 @@ afterEach(() => {
   while (cleanups.length) cleanups.pop()!();
 });
 
-async function connect(repo: string, env: NodeJS.ProcessEnv = {}) {
+async function connect(repo: string, env: NodeJS.ProcessEnv = {}, onReviewChange?: () => void) {
   const store = await RdraStore.open(repo);
   cleanups.push(() => store.close());
-  const server = createMcpServer({ store, index: new QueryIndex(), reviewUrl: () => null, now: () => "2026-09-25T10:00:00+09:00", env });
+  const server = createMcpServer({
+    store,
+    index: new QueryIndex(),
+    reviewUrl: () => "http://127.0.0.1:1234/",
+    now: () => "2026-09-25T10:00:00+09:00",
+    env,
+    onReviewChange,
+  });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client({ name: "test", version: "0" });
@@ -110,9 +117,11 @@ describe("MCP tools", () => {
 
   it("requests a review and reports its status", async () => {
     const repo = await makeRepo(rdraFiles());
-    const { call } = await connect(repo, { SPECIFY_FEATURE_DIRECTORY: "specs/001-demo" });
+    let notified = 0;
+    const { call } = await connect(repo, { SPECIFY_FEATURE_DIRECTORY: "specs/001-demo" }, () => (notified += 1));
     const res = (await call("rdra_request_review")).json();
-    expect(res).toMatchObject({ status: "pending", url: null });
+    expect(res).toMatchObject({ status: "pending", url: "http://127.0.0.1:1234/" });
+    expect(notified).toBe(1);
     const record = JSON.parse(await readFile(join(repo, "specs/001-demo", REVIEW_FILE), "utf8"));
     expect(record.status).toBe("pending");
     expect((await call("rdra_review_status")).json()).toMatchObject({ status: "pending", approval: "pending", lastRound: null });
