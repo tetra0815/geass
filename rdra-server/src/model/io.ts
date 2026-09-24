@@ -38,7 +38,7 @@ export function parseModel(files: FileMap): Model {
     }
     const data: unknown = doc.toJS();
     if (data === null || data === undefined) continue;
-    if (!Array.isArray(data)) throw new ModelParseError(kind.file, 1, "top level must be a list");
+    if (!Array.isArray(data)) throw new ModelParseError(kind.file, 1, "トップレベルはリストにしてください");
     data.forEach((raw, i) => {
       const result = kind.schema.safeParse(raw);
       if (!result.success) {
