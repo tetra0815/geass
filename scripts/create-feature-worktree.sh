@@ -54,6 +54,11 @@ BASE_COMMIT=$(git rev-parse HEAD)
 mkdir -p "$REPO_ROOT/.claude/worktrees"
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_PATH" "$BASE_COMMIT"
 record_base_commit "$REPO_ROOT" "$BRANCH_NAME" "$BASE_COMMIT"
+# Pin the feature directory from the start so the PreToolUse gate and
+# rdra-server see this feature before any skill has run. SPEC_DIR is
+# specs/<ascii-slug>, so it needs no JSON escaping.
+mkdir -p "$WORKTREE_PATH/.geass"
+printf '{"feature_directory":"%s"}\n' "$SPEC_DIR" > "$WORKTREE_PATH/.geass/feature.json"
 
 mkdir -p "$WORKTREE_PATH/.claude"
 cat > "$WORKTREE_PATH/.claude/settings.local.json" <<SETTINGSEOF

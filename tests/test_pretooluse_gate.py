@@ -14,8 +14,8 @@ CLI = PLUGIN_ROOT / "rdra-server" / "dist" / "cli.js"
 FEATURE = "specs/001-demo"
 
 
-def run_gate(repo: Path, payload: dict, path: str | None = None) -> dict | None:
-    env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT)}
+def run_gate(repo: Path, payload: dict, path: str | None = None, plugin_root: Path = PLUGIN_ROOT) -> dict | None:
+    env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(plugin_root)}
     if path is not None:
         env["PATH"] = path
     result = subprocess.run(
@@ -100,8 +100,6 @@ def test_missing_node_blocks_instead_of_passing(feature_repo: Path) -> None:
         found = shutil.which(tool)
         if found:
             (tools / tool).symlink_to(found)
-    if shutil.which("node", path=str(tools)):
-        pytest.skip("node is reachable from the minimal PATH")
     assert "Node 22.13" in denied_reason(run_gate(feature_repo, skill("specify"), path=str(tools)))
 
 
@@ -125,3 +123,46 @@ def test_other_files_and_disabled_projects_can_be_edited(feature_repo: Path) -> 
     write_json(feature_repo / ".geass" / "init-options.json", {})
     review = {"tool_name": "Write", "tool_input": {"file_path": str(feature_repo / FEATURE / "rdra-review.json")}}
     assert run_gate(feature_repo, review) is None
+
+
+def test_feature_branch_without_feature_json_is_still_gated(feature_repo: Path) -> None:
+    (feature_repo / ".geass" / "feature.json").unlink()
+    git(feature_repo, "checkout", "-q", "-b", "20260925-120000-demo")
+    assert "レビューがまだ依頼されていません" in denied_reason(run_gate(feature_repo, skill("specify")))
+
+
+def test_enable_switch_in_main_worktree_gates_linked_worktree(repo: Path) -> None:
+    write_json(repo / ".geass" / "init-options.json", {"require_rdra_approval": True})
+    linked = repo.parent / "linked"
+    git(repo, "worktree", "add", "-q", "-b", "feature-x", str(linked))
+    assert not (linked / ".geass" / "init-options.json").exists()
+    (linked / "docs" / "rdra").mkdir(parents=True)
+    (linked / "docs" / "rdra" / "screens.yaml").write_text("- id: scr.top\n  name: トップ\n")
+    write_json(linked / ".geass" / "feature.json", {"feature_directory": FEATURE})
+    assert "レビューがまだ依頼されていません" in denied_reason(run_gate(linked, skill("specify")))
+    review = {"tool_name": "Write", "tool_input": {"file_path": str(linked / FEATURE / "rdra-review.json")}}
+    assert "レビュー画面からのみ" in denied_reason(run_gate(linked, review))
+
+
+def test_unparseable_check_output_fails_closed(feature_repo: Path, tmp_path: Path) -> None:
+    fake = tmp_path / "plugin"
+    shutil.copytree(PLUGIN_ROOT / "scripts", fake / "scripts")
+    shutil.copytree(PLUGIN_ROOT / "hooks", fake / "hooks")
+    (fake / "rdra-server" / "dist").mkdir(parents=True)
+    (fake / "rdra-server" / "dist" / "cli.js").write_text("console.log('[1]'); process.exit(1);\n")
+    assert "RDRA の承認状態を確認できません" in denied_reason(run_gate(feature_repo, skill("specify"), plugin_root=fake))
+
+
+def test_non_string_file_path_does_not_crash_the_edit_guard(feature_repo: Path) -> None:
+    assert run_gate(feature_repo, {"tool_name": "Write", "tool_input": {"file_path": 1}}) is None
+
+
+def test_rdra_gate_runs_before_the_analyze_check(feature_repo: Path) -> None:
+    (feature_repo / ".geass" / "state").mkdir(parents=True)
+    (feature_repo / ".geass" / "state" / "001-demo.analyzed").write_text("")
+    assert "レビューがまだ依頼されていません" in denied_reason(run_gate(feature_repo, skill("executing-plans")))
+
+
+def test_namespaced_execution_skill_is_gated(feature_repo: Path) -> None:
+    reason = denied_reason(run_gate(feature_repo, skill("superpowers:subagent-driven-development")))
+    assert "レビューがまだ依頼されていません" in reason

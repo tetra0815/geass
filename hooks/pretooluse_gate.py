@@ -16,18 +16,22 @@ otherwise enforce:
     true).
   - design-spec / specify / plan / tasks / implement / executing-plans /
     subagent-driven-development: when require_rdra_approval is true in
-    .geass/init-options.json (default false), the feature's RDRA model must
-    be approved and unchanged since approval, as reported by
-    `rdra-server/dist/cli.js check-approval`.
+    .geass/init-options.json (default false) of this worktree or of the main
+    worktree, the feature's RDRA model must be approved and unchanged since
+    approval, as reported by `rdra-server/dist/cli.js check-approval`. The
+    feature is taken from check-prerequisites.sh, falling back to
+    specs/<branch> on a feature-named branch.
   - Edit / Write / MultiEdit on an rdra-review.json: denied when
-    require_rdra_approval is true, so approvals only come from the review UI.
+    require_rdra_approval is true (same either-worktree rule), so approvals
+    only come from the review UI.
 
 The feature-context checks are a no-op outside a geass feature context
-(check-prerequisites.sh fails), so they never block work unrelated to the
-geass spec pipeline.
+(check-prerequisites.sh fails and the branch is not feature-named), so they
+never block work unrelated to the geass spec pipeline.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -36,6 +40,7 @@ RDRA_GATED_SKILLS = {"design-spec", "specify", "plan", "tasks", "implement"} | E
 GATED_SKILLS = {"feature-start", "fix-start"} | RDRA_GATED_SKILLS
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit"}
 REVIEW_FILE = "rdra-review.json"
+FEATURE_BRANCH = re.compile(r"^(\d{8}-\d{6}-[a-z0-9-]+|\d{3}-[a-z0-9-]+)$")
 
 
 def deny(reason: str) -> dict:
@@ -102,18 +107,72 @@ def rdra_approval_problem(repo_root: str, feature_dir: str):
         return f"RDRA の承認状態を確認できません（Node 22.13 以上が必要です）: {e}"
     if result.returncode == 0:
         return None
-    lines = result.stdout.strip().splitlines()
-    try:
-        data = json.loads(lines[-1]) if lines else {}
-    except json.JSONDecodeError:
-        data = {}
-    message = data.get("message") or (
-        "RDRA の承認状態を確認できません: " + (result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}")
+    unverifiable = "RDRA の承認状態を確認できません: " + (
+        result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
     )
-    changed = data.get("changed")
-    if changed:
-        message += " 変更された要素: " + ", ".join(changed)
-    return message
+    try:
+        lines = result.stdout.strip().splitlines()
+        try:
+            data = json.loads(lines[-1]) if lines else {}
+        except json.JSONDecodeError:
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        message = data.get("message")
+        if not isinstance(message, str) or not message:
+            message = unverifiable
+        changed = data.get("changed")
+        if changed:
+            message += " 変更された要素: " + ", ".join(str(x) for x in changed)
+        return message
+    except Exception:
+        # Whatever went wrong, a non-zero check is never an approval.
+        return unverifiable
+
+
+def main_worktree_path(repo_root: str):
+    """Return the main worktree's path (the first `worktree` entry of
+    `git worktree list --porcelain`), or None if it cannot be determined."""
+    result = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            return line[len("worktree "):]
+    return None
+
+
+def rdra_approval_required(repo_root: str) -> bool:
+    """require_rdra_approval is on if either this worktree's or the main
+    worktree's .geass/init-options.json enables it. /feature-start decides
+    between /rdra and /design-spec from the main worktree's copy, so the gate
+    must honor that copy too even when the feature worktree has none (e.g.
+    the file is uncommitted or ignored)."""
+    if read_init_option_bool(repo_root, "require_rdra_approval", False):
+        return True
+    main_root = main_worktree_path(repo_root)
+    return bool(main_root) and read_init_option_bool(main_root, "require_rdra_approval", False)
+
+
+def branch_feature_dir(repo_root: str):
+    """Fallback feature dir from the current branch name, mirroring
+    rdra-server/src/feature.ts: <repo_root>/specs/<branch> for a feature
+    branch, else None."""
+    result = subprocess.run(
+        ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    branch = result.stdout.strip()
+    if result.returncode != 0 or not FEATURE_BRANCH.match(branch):
+        return None
+    return os.path.join(repo_root, "specs", branch)
 
 
 def root_worktree_branch(repo_root: str):
@@ -179,9 +238,9 @@ def main() -> int:
 
     if tool_name in EDIT_TOOLS:
         path = data.get("tool_input", {}).get("file_path", "")
-        if os.path.basename(path) == REVIEW_FILE and read_init_option_bool(
-            repo_root_of_cwd(), "require_rdra_approval", False
-        ):
+        if not isinstance(path, str):
+            path = ""
+        if os.path.basename(path) == REVIEW_FILE and rdra_approval_required(repo_root_of_cwd()):
             print(json.dumps(deny(
                 f"{REVIEW_FILE} はレビュー画面からのみ更新できます。"
                 "承認・差し戻しは人間がレビュー画面で行ってください。"
@@ -230,19 +289,22 @@ def main() -> int:
         return 0
 
     paths = resolve_feature_paths(repo_root)
-    if paths is None:
+    feature_dir = (paths or {}).get("FEATURE_DIR", "")
+
+    if skill in RDRA_GATED_SKILLS and rdra_approval_required(repo_root):
+        # A fresh feature worktree may not have .geass/feature.json yet; fall
+        # back to the branch name (as rdra-server does) so the gate still
+        # sees the feature rather than silently letting the skill through.
+        rdra_feature_dir = feature_dir or branch_feature_dir(repo_root)
+        if rdra_feature_dir:
+            problem = rdra_approval_problem(repo_root, rdra_feature_dir)
+            if problem:
+                print(json.dumps(deny(problem)))
+                return 0
+
+    if not feature_dir:
         # Not currently inside a geass feature context -- nothing to gate.
         return 0
-
-    feature_dir = paths.get("FEATURE_DIR", "")
-    if not feature_dir:
-        return 0
-
-    if skill in RDRA_GATED_SKILLS and read_init_option_bool(repo_root, "require_rdra_approval", False):
-        problem = rdra_approval_problem(repo_root, feature_dir)
-        if problem:
-            print(json.dumps(deny(problem)))
-            return 0
 
     if skill not in EXECUTION_SKILLS:
         return 0

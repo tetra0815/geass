@@ -71,7 +71,9 @@ instead of `/design-spec`:
 The gate blocks `/design-spec`, `/specify`, `/plan`, `/tasks`, `/implement`,
 and plan execution until the feature's model is approved and unchanged since
 approval, and refuses edits to `rdra-review.json` from file tools — approval
-only happens in the review UI.
+only happens in the review UI. The `require_rdra_approval` setting may live in
+the root worktree's `.geass/init-options.json`; the gate honors it from either
+the root worktree or the feature worktree.
 
 ## Configuration
 
