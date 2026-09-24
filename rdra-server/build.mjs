@@ -1,6 +1,8 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 
+process.env.NODE_ENV = "production";
+
 await esbuild({
   entryPoints: { server: "src/bin/server.ts", cli: "src/bin/cli.ts" },
   outdir: "dist",
