@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rdra": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/rdra-server/dist/server.js"]
+    }
+  }
+}
