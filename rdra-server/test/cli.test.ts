@@ -1,0 +1,111 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { runCli, type CliIo } from "../src/cli.js";
+import { modelHash } from "../src/model/hash.js";
+import { RDRA_DIR } from "../src/model/io.js";
+import { nodeVersionError } from "../src/node-version.js";
+import { decide, emptyReview, requestReview, writeReview } from "../src/review.js";
+import { sampleFiles, sampleModel } from "./fixtures.js";
+import { makeRepo, run } from "./helpers.js";
+
+const rdraFiles = () => Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
+const T = "2026-09-25T10:00:00+09:00";
+
+function capture() {
+  const out: string[] = [];
+  const err: string[] = [];
+  const io: CliIo = { out: (s) => void out.push(s), err: (s) => void err.push(s), sleep: async () => {} };
+  return { io, out, err };
+}
+
+async function check(repo: string, featureDir: string) {
+  const c = capture();
+  const code = await runCli(["check-approval", "--repo", repo, "--feature-dir", featureDir], c.io);
+  return { code, result: JSON.parse(c.out.join("")) };
+}
+
+describe("nodeVersionError", () => {
+  it("accepts 22.13 and later", () => {
+    expect(nodeVersionError("22.13.0")).toBeNull();
+    expect(nodeVersionError("24.4.0")).toBeNull();
+    expect(nodeVersionError("22.12.1")).toContain("Node 22.13 以上");
+    expect(nodeVersionError("20.19.0")).toContain("現在: 20.19.0");
+  });
+});
+
+describe("check-approval", () => {
+  it("reports none, pending, rejected, approved and stale", async () => {
+    const repo = await makeRepo(rdraFiles());
+    const fd = join(repo, "specs/001-demo");
+    expect(await check(repo, fd)).toMatchObject({ code: 1, result: { state: "none" } });
+
+    let rec = requestReview(emptyReview(), { now: T, baseCommit: null });
+    await writeReview(fd, rec);
+    expect(await check(repo, fd)).toMatchObject({ code: 1, result: { state: "pending" } });
+
+    await writeReview(fd, decide(rec, { decision: "rejected", comments: [{ target: null, text: "x" }], hash: "h", now: T }));
+    expect(await check(repo, fd)).toMatchObject({ code: 1, result: { state: "rejected" } });
+
+    rec = decide(rec, { decision: "approved", comments: [], hash: modelHash(sampleModel()), now: T });
+    await writeReview(fd, rec);
+    expect(await check(repo, fd)).toMatchObject({ code: 0, result: { state: "approved" } });
+
+    run(repo, "git", ["add", "-A"]);
+    run(repo, "git", ["commit", "-q", "-m", "approve"]);
+    await writeFile(join(repo, RDRA_DIR, "screens.yaml"), "- id: scr.cart\n  name: カート画面\n");
+    const stale = await check(repo, fd);
+    expect(stale).toMatchObject({ code: 1, result: { state: "stale", changed: ["modified scr.cart"] } });
+    expect(stale.result.message).toContain("再レビュー");
+  });
+
+  it("exits 3 on YAML errors", async () => {
+    const repo = await makeRepo({ [`${RDRA_DIR}/actors.yaml`]: "- id: [\n" });
+    expect(await check(repo, join(repo, "specs/001-demo"))).toMatchObject({ code: 3, result: { state: "error" } });
+  });
+});
+
+describe("wait-review", () => {
+  it("exits 2 when nothing is pending", async () => {
+    const repo = await makeRepo();
+    const c = capture();
+    expect(await runCli(["wait-review", "--repo", repo, "--feature-dir", join(repo, "specs/x")], c.io)).toBe(2);
+  });
+
+  it("returns when the review is decided", async () => {
+    const repo = await makeRepo();
+    const fd = join(repo, "specs/001-demo");
+    const pending = requestReview(emptyReview(), { now: T, baseCommit: null });
+    await writeReview(fd, pending);
+    let polls = 0;
+    const c = capture();
+    c.io.sleep = async () => {
+      polls += 1;
+      if (polls === 3) {
+        await writeReview(fd, decide(pending, { decision: "rejected", comments: [{ target: "uc.a", text: "直して" }], hash: "h", now: T }));
+      }
+    };
+    expect(await runCli(["wait-review", "--repo", repo, "--feature-dir", fd], c.io)).toBe(0);
+    expect(JSON.parse(c.out.join(""))).toMatchObject({ status: "rejected", lastRound: { comments: [{ text: "直して" }] } });
+  });
+
+  it("times out with 124", async () => {
+    const repo = await makeRepo();
+    const fd = join(repo, "specs/001-demo");
+    await writeReview(fd, requestReview(emptyReview(), { now: T, baseCommit: null }));
+    const c = capture();
+    c.io.sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    expect(await runCli(["wait-review", "--repo", repo, "--feature-dir", fd, "--interval-ms", "10", "--timeout-sec", "0.05"], c.io)).toBe(124);
+  });
+});
+
+describe("usage", () => {
+  it("prints the hash and rejects unknown commands", async () => {
+    const repo = await makeRepo(rdraFiles());
+    const c = capture();
+    expect(await runCli(["hash", "--repo", repo], c.io)).toBe(0);
+    expect(c.out.join("").trim()).toBe(modelHash(sampleModel()));
+    expect(await runCli(["nope"], capture().io)).toBe(64);
+    expect(await runCli(["check-approval", "--repo", repo], capture().io)).toBe(64);
+  });
+});
