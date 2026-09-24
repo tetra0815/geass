@@ -20,6 +20,13 @@ describe("applyOperations", () => {
     expect(uc.screens).toEqual(["scr.cart"]);
   });
 
+  it("removes fields set to null", () => {
+    const { model } = applyOperations(sampleModel(), [
+      { op: "upsert", kind: "events", element: { id: "evt.payment-request", target: null, description: null } },
+    ]);
+    expect(model.events[0]).toEqual({ id: "evt.payment-request", name: "決済依頼" });
+  });
+
   it("rejects schema violations with the element id in the message", () => {
     expect(() =>
       applyOperations(sampleModel(), [{ op: "upsert", kind: "actors", element: { id: "act.x", name: "" } }]),

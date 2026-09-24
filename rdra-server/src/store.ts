@@ -13,6 +13,8 @@ import {
 } from "./model/io.js";
 import { emptyModel, type Model } from "./model/kinds.js";
 import type { Relation } from "./model/relations.js";
+import { writeLayoutView } from "./layout.js";
+import type { Positions, ViewKey } from "./model/view-keys.js";
 import { OperationError, applyOperations, type Operation } from "./operations.js";
 import { validate, type Issue } from "./validate.js";
 
@@ -70,6 +72,19 @@ export class RdraStore extends EventEmitter {
 
   apply(ops: Operation[], opts: { expectedVersion?: string } = {}): Promise<ApplyResult> {
     return this.enqueue(() => this.applyNow(ops, opts));
+  }
+
+  setLayout(view: ViewKey, positions: Positions): Promise<Positions> {
+    return this.enqueue(async () => {
+      const merged = await writeLayoutView(this.repoRoot, view, positions);
+      this.emit("layout", { view });
+      this.startWatcher();
+      return merged;
+    });
+  }
+
+  exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    return this.enqueue(fn);
   }
 
   watch(): void {

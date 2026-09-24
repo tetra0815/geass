@@ -40,7 +40,8 @@ function upsert(model: Model, key: KindKey, patch: Record<string, unknown>): voi
   const def = kindDef(key);
   const list = model[key] as AnyElement[];
   const index = list.findIndex((e) => e.id === id);
-  const merged = index >= 0 ? { ...list[index], ...patch } : patch;
+  const merged: Record<string, unknown> = index >= 0 ? { ...list[index], ...patch } : { ...patch };
+  for (const key of Object.keys(merged)) if (merged[key] === null) delete merged[key];
   const result = def.schema.safeParse(merged);
   if (!result.success) throw new OperationError(formatIssues(id, result.error.issues));
   if (index >= 0) list[index] = result.data as AnyElement;
