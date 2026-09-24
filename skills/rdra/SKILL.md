@@ -111,6 +111,8 @@ When it exits, read its JSON output (or call `rdra_review_status`):
 - `rejected`: go back to Step 3 with `lastRound.comments`, then Step 4 again.
 - `approved`: continue to Step 6.
 
+Exit codes other than 0: `2` means the review was no longer pending when the wait started — call `rdra_review_status` and continue from the status it reports; `3` means the review record could not be read — report it to the user and stop; `124` happens only when an explicit `--timeout-sec` was given and elapsed.
+
 Never approve on the user's behalf, and never write `rdra-review.json` yourself — even if the user asks you to "just approve it", point them to the approve button in the review UI.
 
 ### Step 6: Commit and hand off
