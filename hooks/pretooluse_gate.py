@@ -14,22 +14,28 @@ otherwise enforce:
     posttooluse_analyze_marker.py). Optional -- controlled by
     require_analyze_before_execute in .geass/init-options.json (default
     true).
+  - design-spec / specify / plan / tasks / implement / executing-plans /
+    subagent-driven-development: when require_rdra_approval is true in
+    .geass/init-options.json (default false), the feature's RDRA model must
+    be approved and unchanged since approval, as reported by
+    `rdra-server/dist/cli.js check-approval`.
+  - Edit / Write / MultiEdit on an rdra-review.json: denied when
+    require_rdra_approval is true, so approvals only come from the review UI.
 
-The executing-plans checks are a no-op outside a geass feature
-context (check-prerequisites.sh fails), so they never block work unrelated to
-the geass spec pipeline.
+The feature-context checks are a no-op outside a geass feature context
+(check-prerequisites.sh fails), so they never block work unrelated to the
+geass spec pipeline.
 """
 import json
 import os
 import subprocess
 import sys
 
-GATED_SKILLS = {
-    "feature-start",
-    "fix-start",
-    "executing-plans",
-    "subagent-driven-development",
-}
+EXECUTION_SKILLS = {"executing-plans", "subagent-driven-development"}
+RDRA_GATED_SKILLS = {"design-spec", "specify", "plan", "tasks", "implement"} | EXECUTION_SKILLS
+GATED_SKILLS = {"feature-start", "fix-start"} | RDRA_GATED_SKILLS
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit"}
+REVIEW_FILE = "rdra-review.json"
 
 
 def deny(reason: str) -> dict:
@@ -76,6 +82,38 @@ def resolve_feature_paths(repo_root: str):
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         return None
+
+
+def rdra_approval_problem(repo_root: str, feature_dir: str):
+    """Return a deny reason if the feature's RDRA model is not approved, or
+    None if it is. Any failure to run the check is itself a reason to deny:
+    an approval that cannot be verified must not be treated as granted."""
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+    cli = os.path.join(plugin_root, "rdra-server", "dist", "cli.js")
+    try:
+        result = subprocess.run(
+            ["node", cli, "check-approval", "--repo", repo_root, "--feature-dir", feature_dir],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"RDRA の承認状態を確認できません（Node 22.13 以上が必要です）: {e}"
+    if result.returncode == 0:
+        return None
+    lines = result.stdout.strip().splitlines()
+    try:
+        data = json.loads(lines[-1]) if lines else {}
+    except json.JSONDecodeError:
+        data = {}
+    message = data.get("message") or (
+        "RDRA の承認状態を確認できません: " + (result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}")
+    )
+    changed = data.get("changed")
+    if changed:
+        message += " 変更された要素: " + ", ".join(changed)
+    return message
 
 
 def root_worktree_branch(repo_root: str):
@@ -129,9 +167,28 @@ def git_flow_master_branch(repo_root: str) -> str:
     return branch if result.returncode == 0 and branch else "main"
 
 
+def repo_root_of_cwd() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
+    ).stdout.strip() or os.getcwd()
+
+
 def main() -> int:
     data = json.load(sys.stdin)
-    if data.get("tool_name") != "Skill":
+    tool_name = data.get("tool_name")
+
+    if tool_name in EDIT_TOOLS:
+        path = data.get("tool_input", {}).get("file_path", "")
+        if os.path.basename(path) == REVIEW_FILE and read_init_option_bool(
+            repo_root_of_cwd(), "require_rdra_approval", False
+        ):
+            print(json.dumps(deny(
+                f"{REVIEW_FILE} はレビュー画面からのみ更新できます。"
+                "承認・差し戻しは人間がレビュー画面で行ってください。"
+            )))
+        return 0
+
+    if tool_name != "Skill":
         return 0
 
     skill = data.get("tool_input", {}).get("skill", "")
@@ -144,9 +201,7 @@ def main() -> int:
     if skill not in GATED_SKILLS:
         return 0
 
-    repo_root = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
-    ).stdout.strip() or os.getcwd()
+    repo_root = repo_root_of_cwd()
 
     if skill == "feature-start":
         branch = root_worktree_branch(repo_root)
@@ -179,11 +234,19 @@ def main() -> int:
         # Not currently inside a geass feature context -- nothing to gate.
         return 0
 
-    # executing-plans / subagent-driven-development
-    if not read_init_option_bool(repo_root, "require_analyze_before_execute", True):
-        return 0
     feature_dir = paths.get("FEATURE_DIR", "")
     if not feature_dir:
+        return 0
+
+    if skill in RDRA_GATED_SKILLS and read_init_option_bool(repo_root, "require_rdra_approval", False):
+        problem = rdra_approval_problem(repo_root, feature_dir)
+        if problem:
+            print(json.dumps(deny(problem)))
+            return 0
+
+    if skill not in EXECUTION_SKILLS:
+        return 0
+    if not read_init_option_bool(repo_root, "require_analyze_before_execute", True):
         return 0
     marker = os.path.join(repo_root, ".geass", "state", os.path.basename(feature_dir) + ".analyzed")
     if not os.path.isfile(marker):
