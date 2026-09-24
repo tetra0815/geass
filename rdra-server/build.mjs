@@ -7,6 +7,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22",
+  external: ["bufferutil", "utf-8-validate"],
   banner: { js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);" },
   logLevel: "warning",
 });

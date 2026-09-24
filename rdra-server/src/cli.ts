@@ -23,6 +23,7 @@ const USAGE = [
   "  cli.js check-approval --repo <root> --feature-dir <dir>",
   "  cli.js wait-review --repo <root> --feature-dir <dir> [--interval-ms 1000] [--timeout-sec 0]",
   "  cli.js hash --repo <root>",
+  "  cli.js serve --repo <root> [--port 0]",
   "",
 ].join("\n");
 
@@ -122,6 +123,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         "feature-dir": { type: "string" },
         "interval-ms": { type: "string" },
         "timeout-sec": { type: "string" },
+        port: { type: "string" },
       },
       strict: true,
     }) as { values: Record<string, string | undefined> });
@@ -135,6 +137,10 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
   if (command === "check-approval" && repo && featureDir) return checkApproval(repo, featureDir, io);
   if (command === "wait-review" && repo && featureDir) {
     return waitReview(featureDir, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
+  }
+  if (command === "serve" && repo) {
+    const { serve } = await import("./serve.js");
+    return serve(repo, Number(values.port ?? "0"), io);
   }
   if (command === "hash" && repo) {
     try {
