@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,10 +15,23 @@ beforeAll(() => {
 }, 60_000);
 
 describe("built bundles", () => {
-  it("produces server.js and cli.js", () => {
+  it("produces server.js, cli.js and the web app", () => {
     expect(existsSync(dist("server.js"))).toBe(true);
     expect(existsSync(dist("cli.js"))).toBe(true);
+    expect(existsSync(dist("web/index.html"))).toBe(true);
   });
+
+  it("serves the web app and API from the CLI", async () => {
+    const repo = await makeRepo();
+    const child = spawn("node", [dist("cli.js"), "serve", "--repo", repo], { stdio: ["ignore", "pipe", "ignore"] });
+    try {
+      const url = await new Promise<string>((resolve) => child.stdout!.once("data", (c) => resolve(JSON.parse(String(c)).url)));
+      expect((await fetch(url)).headers.get("content-type")).toContain("text/html");
+      expect((await fetch(new URL("api/state", url))).status).toBe(200);
+    } finally {
+      child.kill("SIGTERM");
+    }
+  }, 20_000);
 
   it("serves MCP tools over stdio", async () => {
     const repo = await makeRepo();

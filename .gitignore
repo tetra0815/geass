@@ -1,1 +1,3 @@
 rdra-server/node_modules/
+rdra-server/test-results/
+rdra-server/playwright-report/
