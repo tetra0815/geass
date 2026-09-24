@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { request } from "node:http";
+import { createConnection } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
@@ -150,18 +151,67 @@ describe("HTTP API", () => {
     ws.close();
   });
 
+  it("survives WebSocket protocol errors", async () => {
+    const { http } = await setup();
+    const port = Number(new URL(http.url).port);
+    await new Promise<void>((resolve, reject) => {
+      const socket = createConnection({ port, host: "127.0.0.1" });
+      socket.on("connect", () => {
+        const upgradeRequest = [
+          "GET /ws HTTP/1.1",
+          "Host: 127.0.0.1:" + port,
+          "Upgrade: websocket",
+          "Connection: Upgrade",
+          "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+          "Sec-WebSocket-Version: 13",
+          "",
+          "",
+        ].join("\r\n");
+        socket.write(upgradeRequest);
+        let headerDone = false;
+        socket.on("data", (data) => {
+          if (!headerDone) {
+            const text = data.toString();
+            if (text.includes("101")) {
+              headerDone = true;
+              const unmaskedFrame = Buffer.from([0x81, 0x02, 0x68, 0x69]);
+              socket.write(unmaskedFrame);
+              socket.destroy();
+              resolve();
+            }
+          }
+        });
+      });
+      socket.on("error", reject);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const res = await fetch(new URL("/api/state", http.url));
+    expect(res.status).toBe(200);
+  });
+
   it("serves the web app with an SPA fallback and blocks traversal", async () => {
     const { repo } = await setup();
     const webRoot = join(repo, "web-dist");
     await mkdir(join(webRoot, "assets"), { recursive: true });
     await writeFile(join(webRoot, "index.html"), "<html>rdra</html>");
     await writeFile(join(webRoot, "assets", "app.js"), "console.log(1)");
-    const { call } = await setup({ webRoot });
+    await writeFile(join(repo, "secret.js"), "TOP-SECRET");
+    const { call, http } = await setup({ webRoot });
     expect((await call("GET", "/")).text).toBe("<html>rdra</html>");
     expect((await call("GET", "/some/route")).text).toBe("<html>rdra</html>");
     expect((await call("GET", "/assets/app.js")).text).toBe("console.log(1)");
     expect((await call("GET", "/assets/missing.js")).status).toBe(404);
-    expect((await call("GET", "/../../etc/passwd.js")).status).not.toBe(200);
+    const port = Number(new URL(http.url).port);
+    const text = await new Promise<string>((resolve, reject) => {
+      const req = request({ host: "127.0.0.1", port, path: "/..%2Fsecret.js" }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => resolve(data));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    expect(text).not.toContain("TOP-SECRET");
   });
 
   it("explains when the web app is not built", async () => {

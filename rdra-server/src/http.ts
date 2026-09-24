@@ -197,7 +197,7 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
     });
   });
 
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   server.on("upgrade", (req, socket, head) => {
     const { pathname } = new URL(req.url ?? "/", "http://localhost");
     if (pathname !== "/ws" || !allowedHost(req)) {
@@ -206,6 +206,10 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
       sockets.add(ws);
+      ws.on("error", () => {
+        sockets.delete(ws);
+        ws.terminate();
+      });
       ws.on("close", () => sockets.delete(ws));
     });
   });
