@@ -1,0 +1,173 @@
+import { EventEmitter } from "node:events";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { request } from "node:http";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { WebSocket } from "ws";
+import { startHttp, type RdraHttp } from "../src/http.js";
+import { RDRA_DIR } from "../src/model/io.js";
+import { REVIEW_FILE, emptyReview, requestReview, writeReview } from "../src/review.js";
+import { RdraStore } from "../src/store.js";
+import { sampleFiles } from "./fixtures.js";
+import { makeRepo, run } from "./helpers.js";
+
+const rdraFiles = () => Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
+const FEATURE = "specs/001-demo";
+const cleanups: (() => Promise<void> | void)[] = [];
+afterEach(async () => {
+  while (cleanups.length) await cleanups.pop()!();
+});
+
+async function setup(opts: { webRoot?: string | null; feature?: boolean } = {}) {
+  const repo = await makeRepo(rdraFiles());
+  const store = await RdraStore.open(repo);
+  const reviewEvents = new EventEmitter();
+  const env = opts.feature === false ? {} : { SPECIFY_FEATURE_DIRECTORY: FEATURE };
+  const http: RdraHttp = await startHttp({
+    store,
+    reviewEvents,
+    webRoot: opts.webRoot ?? null,
+    env,
+    now: () => "2026-09-25T10:00:00+09:00",
+  });
+  cleanups.push(() => store.close(), () => http.close());
+  const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = { "x-rdra-client": "web" }) => {
+    const res = await fetch(new URL(path, http.url), {
+      method,
+      headers: { "content-type": "application/json", ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await res.text();
+    const isJson = res.headers.get("content-type")?.startsWith("application/json") ?? false;
+    return { status: res.status, body: isJson ? JSON.parse(text) : null, text };
+  };
+  return { repo, store, http, call, reviewEvents, featureDir: join(repo, FEATURE) };
+}
+
+describe("HTTP API", () => {
+  it("serves the current state", async () => {
+    const { call, store } = await setup();
+    const { status, body } = await call("GET", "/api/state");
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ version: store.version, parseError: null, approval: "none", review: { status: "none" } });
+    expect(body.model.usecases[0].id).toBe("uc.place-order");
+    expect(body.issues).toEqual([]);
+    expect(body.layout["usecase-composite"]).toEqual({});
+  });
+
+  it("applies operations with optimistic locking", async () => {
+    const { call, store, repo } = await setup();
+    const op = { op: "upsert", kind: "screens", element: { id: "scr.top", name: "トップ" } };
+    expect((await call("POST", "/api/ops", { expectedVersion: "sha256:stale", ops: [op] })).status).toBe(409);
+    const ok = await call("POST", "/api/ops", { expectedVersion: store.version, ops: [op] });
+    expect(ok.status).toBe(200);
+    expect(ok.body.ok).toBe(true);
+    expect(await readFile(join(repo, RDRA_DIR, "screens.yaml"), "utf8")).toContain("scr.top");
+    const bad = await call("POST", "/api/ops", { ops: [{ op: "delete", id: "scr.none" }] });
+    expect(bad.status).toBe(422);
+  });
+
+  it("rejects mutations without the client header or from foreign hosts", async () => {
+    const { call, http } = await setup();
+    expect((await call("POST", "/api/ops", { ops: [] }, {})).status).toBe(403);
+    const port = Number(new URL(http.url).port);
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request({ host: "127.0.0.1", port, path: "/api/state", headers: { host: `evil.example:${port}` } }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    expect(status).toBe(403);
+  });
+
+  it("saves layout per view", async () => {
+    const { call } = await setup();
+    expect((await call("PUT", "/api/layout/information-model", { positions: { "inf.order": { x: 3, y: 4 } } })).status).toBe(204);
+    expect((await call("GET", "/api/state")).body.layout["information-model"]).toEqual({ "inf.order": { x: 3, y: 4 } });
+    expect((await call("PUT", "/api/layout/nope", { positions: {} })).status).toBe(404);
+  });
+
+  it("returns the diff against the base commit", async () => {
+    const { call, store, repo } = await setup();
+    run(repo, "git", ["checkout", "-q", "-b", "20260925-120000-demo"]);
+    run(repo, "git", ["config", "branch.20260925-120000-demo.geass-base-commit", run(repo, "git", ["rev-parse", "HEAD"]).trim()]);
+    await store.apply([{ op: "upsert", kind: "screens", element: { id: "scr.top", name: "トップ" } }]);
+    const { body } = await call("GET", "/api/diff");
+    expect(body.changes.map((c: { id: string }) => c.id)).toEqual(["scr.top"]);
+  });
+
+  it("records decisions only for pending reviews at the current version", async () => {
+    const { call, store, featureDir, reviewEvents } = await setup();
+    expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version })).status).toBe(422);
+
+    await writeReview(featureDir, requestReview(emptyReview(), { now: "t", baseCommit: null }));
+    expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: "sha256:old" })).status).toBe(409);
+    expect((await call("POST", "/api/review/decision", { decision: "rejected", comments: [], version: store.version })).status).toBe(422);
+
+    let notified = 0;
+    reviewEvents.on("review", () => (notified += 1));
+    const rejected = await call("POST", "/api/review/decision", {
+      decision: "rejected",
+      comments: [{ target: "uc.place-order", text: "在庫の扱いを書いて" }],
+      version: store.version,
+    });
+    expect(rejected.status).toBe(200);
+    expect(rejected.body.review.status).toBe("rejected");
+    expect(notified).toBe(1);
+
+    await writeReview(featureDir, requestReview(rejected.body.review, { now: "t", baseCommit: null }));
+    const approved = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version });
+    expect(approved.status).toBe(200);
+    const record = JSON.parse(await readFile(join(featureDir, REVIEW_FILE), "utf8"));
+    expect(record).toMatchObject({ status: "approved", approved_hash: store.version });
+    expect(record.rounds).toHaveLength(2);
+  });
+
+  it("refuses approval while errors remain", async () => {
+    const { call, store, repo, featureDir } = await setup();
+    await writeFile(join(repo, RDRA_DIR, "screens.yaml"), "[]\n");
+    await store.reload();
+    await writeReview(featureDir, requestReview(emptyReview(), { now: "t", baseCommit: null }));
+    const res = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version });
+    expect(res.status).toBe(422);
+    expect(res.body.message).toContain("エラー");
+  });
+
+  it("refuses decisions outside a feature", async () => {
+    const { call, store } = await setup({ feature: false });
+    expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version })).status).toBe(404);
+  });
+
+  it("pushes change notifications over WebSocket", async () => {
+    const { http, store } = await setup();
+    const ws = new WebSocket(new URL("/ws", http.url.replace("http", "ws")));
+    await new Promise((resolve) => ws.once("open", resolve));
+    const message = new Promise<string>((resolve) => ws.once("message", (data) => resolve(String(data))));
+    await store.apply([{ op: "upsert", kind: "screens", element: { id: "scr.top", name: "トップ" } }]);
+    expect(JSON.parse(await message)).toEqual({ type: "model" });
+    ws.close();
+  });
+
+  it("serves the web app with an SPA fallback and blocks traversal", async () => {
+    const { repo } = await setup();
+    const webRoot = join(repo, "web-dist");
+    await mkdir(join(webRoot, "assets"), { recursive: true });
+    await writeFile(join(webRoot, "index.html"), "<html>rdra</html>");
+    await writeFile(join(webRoot, "assets", "app.js"), "console.log(1)");
+    const { call } = await setup({ webRoot });
+    expect((await call("GET", "/")).text).toBe("<html>rdra</html>");
+    expect((await call("GET", "/some/route")).text).toBe("<html>rdra</html>");
+    expect((await call("GET", "/assets/app.js")).text).toBe("console.log(1)");
+    expect((await call("GET", "/assets/missing.js")).status).toBe(404);
+    expect((await call("GET", "/../../etc/passwd.js")).status).not.toBe(200);
+  });
+
+  it("explains when the web app is not built", async () => {
+    const { call } = await setup();
+    const res = await call("GET", "/");
+    expect(res.status).toBe(503);
+    expect(res.text).toContain("ビルドされていません");
+  });
+});
