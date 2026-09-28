@@ -62,7 +62,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_query",
     {
       description:
-        "RDRA モデルに読み取り専用の SQL で問い合わせる。テーブル: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref)。種別ごとのビュー: actors, external_systems, bucs, usecases, screens, events, information, state_models。",
+        "RDRA モデルに読み取り専用の SQL で問い合わせる。テーブル: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref), acceptance(usecase_id, ac_id, ref, given_text, when_text, then_text)。ビュー: principle_scope(principle_id, target_id)、種別ごとの actors, external_systems, bucs, usecases, screens, events, information, state_models, principles。",
       inputSchema: { sql: z.string().min(1) },
     },
     async ({ sql }) => {

@@ -35,4 +35,19 @@ describe("QueryIndex", () => {
     index.rebuild(m);
     expect(index.query("SELECT count(*) AS n FROM screens")).toEqual([{ n: 0 }]);
   });
+
+  it("indexes principles, their scope and acceptance criteria", () => {
+    const m = sampleModel();
+    m.principles.push({ id: "pr.audit", name: "監査", category: "security", level: "must", scope: ["uc.place-order"] });
+    m.usecases[0].acceptance.push({ id: "ac1", given: "在庫あり", when: "注文する", then: "作られる" });
+    const index = new QueryIndex();
+    index.rebuild(m);
+    expect(index.query("SELECT id FROM principles")).toEqual([{ id: "pr.audit" }]);
+    expect(index.query("SELECT principle_id, target_id FROM principle_scope")).toEqual([
+      { principle_id: "pr.audit", target_id: "uc.place-order" },
+    ]);
+    expect(index.query("SELECT usecase_id, ac_id, ref, given_text, when_text, then_text FROM acceptance")).toEqual([
+      { usecase_id: "uc.place-order", ac_id: "ac1", ref: "uc.place-order#ac1", given_text: "在庫あり", when_text: "注文する", then_text: "作られる" },
+    ]);
+  });
 });
