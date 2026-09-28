@@ -6,8 +6,10 @@ import {
   findElement,
   kindOfId,
   type AnyElement,
+  type Acceptance,
   type Model,
   type StateModel,
+  type Usecase,
 } from "../../../src/model/kinds.js";
 import { parseTransitionRef, relationsOf, type Relation, type RelationKind } from "../../../src/model/relations.js";
 import { applyOperations, type Operation } from "../../../src/operations.js";
@@ -153,6 +155,7 @@ function ElementInspector({ model, disabled, onApply, onComment, onSelect, eleme
       <RelationList element={element} disabled={disabled} onApply={onApply} />
       <AddRelation model={model} element={element} disabled={disabled} onApply={onApply} />
       {kind.key === "usecases" && <TransitionPicker model={model} element={element} disabled={disabled} onApply={onApply} />}
+      {kind.key === "usecases" && <AcceptanceEditor usecase={element as Usecase} disabled={disabled} onApply={onApply} />}
       {kind.key === "states" && <StateEditor stateModel={element as StateModel} disabled={disabled} onApply={onApply} />}
 
       <div className="danger">
@@ -346,6 +349,94 @@ function StateEditor({ stateModel, disabled, onApply }: { stateModel: StateModel
         >
           遷移を追加
         </button>
+      </div>
+    </div>
+  );
+}
+
+function AcceptanceEditor({ usecase, disabled, onApply }: { usecase: Usecase; disabled: boolean; onApply: Props["onApply"] }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const save = (acceptance: Acceptance[]) => onApply([{ op: "upsert", kind: "usecases", element: { id: usecase.id, acceptance } }]);
+  const replace = (next: Acceptance) => save(usecase.acceptance.map((a) => (a.id === next.id ? next : a))).then((ok) => ok && setEditing(null));
+
+  return (
+    <div className="acceptance">
+      <h4>受け入れ条件</h4>
+      {usecase.acceptance.length === 0 && <p className="hint">まだありません。この feature で変更したユースケースには 1 件以上必要です。</p>}
+      <ul className="relations">
+        {usecase.acceptance.map((a) =>
+          editing === a.id ? (
+            <li key={a.id}>
+              <AcceptanceForm initial={a} existing={[]} disabled={disabled} onSave={replace} onCancel={() => setEditing(null)} />
+            </li>
+          ) : (
+            <li key={a.id}>
+              <span>
+                <code>{a.id}</code> {a.given && <>Given {a.given} / </>}When {a.when} / Then {a.then}
+              </span>
+              <button disabled={disabled} onClick={() => setEditing(a.id)}>
+                編集
+              </button>
+              <button disabled={disabled} onClick={() => void save(usecase.acceptance.filter((x) => x.id !== a.id))}>
+                外す
+              </button>
+            </li>
+          ),
+        )}
+      </ul>
+      <AcceptanceForm
+        existing={usecase.acceptance.map((a) => a.id)}
+        disabled={disabled}
+        onSave={(a) => save([...usecase.acceptance, a])}
+      />
+    </div>
+  );
+}
+
+function AcceptanceForm({
+  initial,
+  existing,
+  disabled,
+  onSave,
+  onCancel,
+}: {
+  initial?: Acceptance;
+  existing: string[];
+  disabled: boolean;
+  onSave: (a: Acceptance) => Promise<unknown>;
+  onCancel?: () => void;
+}) {
+  const [id, setId] = useState(initial?.id ?? "");
+  const [given, setGiven] = useState(initial?.given ?? "");
+  const [when, setWhen] = useState(initial?.when ?? "");
+  const [then, setThen] = useState(initial?.then ?? "");
+  const valid = slugPattern.test(id) && !existing.includes(id) && when.trim() !== "" && then.trim() !== "";
+
+  const submit = async () => {
+    const ok = await onSave({ id, given: given.trim() || undefined, when: when.trim(), then: then.trim() });
+    if (ok === true && !initial) {
+      setId("");
+      setGiven("");
+      setWhen("");
+      setThen("");
+    }
+  };
+
+  return (
+    <div className="add-relation">
+      {initial ? (
+        <code>{initial.id}</code>
+      ) : (
+        <input aria-label="受け入れ条件ID" placeholder="ac1" value={id} disabled={disabled} onChange={(e) => setId(e.target.value)} />
+      )}
+      <input aria-label="Given" placeholder="前提（任意）" value={given} disabled={disabled} onChange={(e) => setGiven(e.target.value)} />
+      <input aria-label="When" placeholder="操作" value={when} disabled={disabled} onChange={(e) => setWhen(e.target.value)} />
+      <input aria-label="Then" placeholder="結果" value={then} disabled={disabled} onChange={(e) => setThen(e.target.value)} />
+      <div className="row">
+        <button disabled={disabled || !valid} onClick={() => void submit()}>
+          {initial ? "保存" : "受け入れ条件を追加"}
+        </button>
+        {onCancel && <button onClick={onCancel}>やめる</button>}
       </div>
     </div>
   );

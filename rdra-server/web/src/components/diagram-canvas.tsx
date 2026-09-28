@@ -25,15 +25,34 @@ interface Props {
   onSelect: (selection: Selection) => void;
   onConnect: (source: string, target: string) => void;
   onMoved: (positions: Positions) => void;
+  onOpenPrinciples: (id: string) => void;
 }
 
-export function DiagramCanvas({ diagram, layout, selection, readOnly, onSelect, onConnect, onMoved }: Props) {
+export function DiagramCanvas({ diagram, layout, selection, readOnly, onSelect, onConnect, onMoved, onOpenPrinciples }: Props) {
   const initialNodes = useMemo<Node[]>(
     () =>
       diagram.nodes.map((n) => ({
         id: n.id,
         position: layout.positions[n.id] ?? { x: 0, y: 0 },
-        data: { label: n.label },
+        data: {
+          label: n.principles ? (
+            <span>
+              {n.label}
+              <button
+                className="badge"
+                title="この要素にかかる MUST 原則"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenPrinciples(n.elementId);
+                }}
+              >
+                原則 {n.principles}
+              </button>
+            </span>
+          ) : (
+            n.label
+          ),
+        },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
         parentId: n.parent,
@@ -44,7 +63,7 @@ export function DiagramCanvas({ diagram, layout, selection, readOnly, onSelect, 
         connectable: !readOnly && n.status !== "removed",
         selected: selection?.type === "node" && selection.id === n.id,
       })),
-    [diagram, layout, readOnly, selection],
+    [diagram, layout, readOnly, selection, onOpenPrinciples],
   );
   const [nodes, setNodes] = useState<Node[]>(initialNodes);
   useEffect(() => setNodes(initialNodes), [initialNodes]);

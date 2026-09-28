@@ -192,6 +192,7 @@ export function App() {
                 onSelect={setSelection}
                 onConnect={connect}
                 onMoved={moved}
+                onOpenPrinciples={openPrinciples}
               />
             ) : (
               <div className="loading">配置を計算中…</div>

@@ -2,6 +2,7 @@ import type { ElementChange } from "../../src/diff.js";
 import { KINDS, emptyModel, kindOfId, type AnyElement, type Model } from "../../src/model/kinds.js";
 import { parseTransitionRef, relationsOf, type Relation, type RelationKind } from "../../src/model/relations.js";
 import type { ViewKey } from "../../src/model/view-keys.js";
+import { mustPrinciplesFor } from "./principles.js";
 
 export type ChangeStatus = "added" | "modified" | "removed";
 
@@ -12,6 +13,7 @@ export interface DiagramNode {
   elementId: string;
   parent?: string;
   status?: ChangeStatus;
+  principles?: number;
 }
 
 export interface DiagramEdge {
@@ -88,7 +90,8 @@ function projectElements(view: ViewKey, model: Model, changes: ElementChange[]):
   for (const kind of KINDS) {
     if (!prefixes.includes(kind.prefix)) continue;
     for (const e of model[kind.key] as AnyElement[]) {
-      nodes.push({ id: e.id, type: kind.prefix, label: e.name, elementId: e.id, status: statusOf.get(e.id) });
+      const count = view === "usecase-composite" && kind.prefix === "uc" ? mustPrinciplesFor(model, e.id).length : 0;
+      nodes.push({ id: e.id, type: kind.prefix, label: e.name, elementId: e.id, status: statusOf.get(e.id), principles: count || undefined });
     }
   }
   for (const c of changes) {

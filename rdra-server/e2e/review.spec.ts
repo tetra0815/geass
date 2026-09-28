@@ -77,3 +77,28 @@ test("edit the model, reject with a comment, then approve", async ({ page }) => 
   const check = spawnSync("node", [cli, "check-approval", "--repo", repo], { encoding: "utf8" });
   expect(check.status).toBe(0);
 });
+
+test("add a principle, give the usecase acceptance criteria, and follow the badge", async ({ page }) => {
+  await page.goto(url);
+  await page.getByRole("button", { name: "原則", exact: true }).click();
+  await page.getByLabel("原則ID").fill("audit-log");
+  await page.getByLabel("原則名").fill("全ての更新を監査ログに残す");
+  await page.getByLabel("分類").selectOption("security");
+  await page.getByLabel("対象").fill("uc.place-order");
+  await page.getByLabel("原則の説明").fill("誰が・いつ・何を変えたかを記録する");
+  await page.getByRole("button", { name: "原則を追加" }).click();
+  await expect(page.getByRole("cell", { name: "全ての更新を監査ログに残す" })).toBeVisible();
+  await expect.poll(async () => readFile(join(repo, RDRA_DIR, "principles.yaml"), "utf8")).toContain("pr.audit-log");
+
+  await page.getByRole("button", { name: "ユースケース複合" }).click();
+  await page.locator(".react-flow__node", { hasText: "注文する" }).click();
+  await page.getByLabel("受け入れ条件ID").fill("ac1");
+  await page.getByLabel("Given").fill("カートに商品がある");
+  await page.getByLabel("When").fill("注文を確定する");
+  await page.getByLabel("Then").fill("注文が作られる");
+  await page.getByRole("button", { name: "受け入れ条件を追加" }).click();
+  await expect.poll(async () => readFile(join(repo, RDRA_DIR, "usecases.yaml"), "utf8")).toContain("then: 注文が作られる");
+
+  await page.locator(".react-flow__node", { hasText: "注文する" }).getByRole("button", { name: "原則 1" }).click();
+  await expect(page.locator("tr.focused", { hasText: "pr.audit-log" })).toBeVisible();
+});
