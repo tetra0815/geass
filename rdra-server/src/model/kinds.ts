@@ -28,6 +28,18 @@ const idList = () => z.array(z.string()).default(() => []);
 
 export const AccessSchema = z.enum(["create", "read", "update", "delete"]);
 
+export const AcceptanceSchema = z.strictObject({
+  id: z.string().regex(slugPattern, "受け入れ条件の id はスラッグ（英小文字・数字・ハイフン）にしてください"),
+  given: z.string().optional(),
+  when: z.string(),
+  then: z.string(),
+});
+export type Acceptance = z.output<typeof AcceptanceSchema>;
+
+export function acceptanceRef(usecaseId: string, acId: string): string {
+  return `${usecaseId}#${acId}`;
+}
+
 export const ActorSchema = z.strictObject({ ...common("act") });
 export const ExternalSystemSchema = z.strictObject({ ...common("ext") });
 export const ScreenSchema = z.strictObject({ ...common("scr") });
@@ -44,6 +56,7 @@ export const UsecaseSchema = z.strictObject({
   events: idList(),
   information: z.array(z.strictObject({ ref: z.string(), access: AccessSchema })).default(() => []),
   transitions: idList(),
+  acceptance: z.array(AcceptanceSchema).default(() => []),
 });
 export const EventSchema = z.strictObject({
   ...common("evt"),

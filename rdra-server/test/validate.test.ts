@@ -115,4 +115,33 @@ describe("validate", () => {
       expect(codes(files)).toEqual(["warning:principle-without-description:pr.a"]);
     });
   });
+
+  describe("acceptance", () => {
+    const withAcceptance = (lines: string[]) => {
+      const files = sampleFiles();
+      files["usecases.yaml"] += ["  acceptance:", ...lines, ""].join("\n");
+      return files;
+    };
+
+    it("accepts well-formed criteria", () => {
+      expect(codes(withAcceptance(["    - { id: ac1, given: 在庫あり, when: 注文する, then: 注文が作られる }"]))).toEqual([]);
+    });
+
+    it("flags duplicate ids and blank when/then", () => {
+      expect(
+        codes(
+          withAcceptance([
+            "    - { id: ac1, when: 注文する, then: 作られる }",
+            "    - { id: ac1, when: 注文する, then: 作られる }",
+            '    - { id: ac2, when: 注文する, then: "   " }',
+            '    - { id: ac3, when: "", then: 作られる }',
+          ]),
+        ),
+      ).toEqual([
+        "error:duplicate-acceptance:uc.place-order",
+        "error:empty-acceptance:uc.place-order",
+        "error:empty-acceptance:uc.place-order",
+      ]);
+    });
+  });
 });

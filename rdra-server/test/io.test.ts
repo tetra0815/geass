@@ -70,6 +70,15 @@ describe("serializeModel", () => {
     expect(files["actors.yaml"]).toBe("[]\n");
     expect(Object.keys(files)).toHaveLength(9);
   });
+
+  it("round-trips principles and acceptance criteria", () => {
+    const files = sampleFiles();
+    files["usecases.yaml"] += "  acceptance:\n    - { id: ac1, when: 注文する, then: 作られる }\n";
+    files["principles.yaml"] = "- id: pr.tdd\n  name: TDD\n  category: engineering\n  level: must\n";
+    const model = parseModel(files);
+    expect(parseModel(serializeModel(model))).toEqual(model);
+    expect(serializeModel(model)["principles.yaml"]).toContain("category: engineering");
+  });
 });
 
 describe("file io", () => {

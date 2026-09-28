@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  AcceptanceSchema,
   ActorSchema,
   KINDS,
   UsecaseSchema,
   StateModelSchema,
   PrincipleSchema,
+  acceptanceRef,
   emptyModel,
   findElement,
   kindOfId,
@@ -78,5 +80,15 @@ describe("kinds", () => {
     expect(PrincipleSchema.safeParse({ id: "pr.x", name: "X", category: "legal", level: "must" }).success).toBe(false);
     expect(PrincipleSchema.safeParse({ id: "pr.x", name: "X", category: "security", level: "may" }).success).toBe(false);
     expect(PrincipleSchema.safeParse({ id: "pr.x", name: "X", level: "must" }).success).toBe(false);
+  });
+
+  it("parses acceptance criteria on usecases", () => {
+    const uc = UsecaseSchema.parse({ id: "uc.a", name: "A", acceptance: [{ id: "ac1", when: "押す", then: "保存される" }] });
+    expect(uc.acceptance).toEqual([{ id: "ac1", when: "押す", then: "保存される" }]);
+    expect(UsecaseSchema.parse({ id: "uc.b", name: "B" }).acceptance).toEqual([]);
+    expect(AcceptanceSchema.safeParse({ id: "AC1", when: "w", then: "t" }).success).toBe(false);
+    expect(AcceptanceSchema.safeParse({ id: "ac1", then: "t" }).success).toBe(false);
+    expect(AcceptanceSchema.safeParse({ id: "ac1", when: "w", then: "t", extra: 1 }).success).toBe(false);
+    expect(acceptanceRef("uc.a", "ac1")).toBe("uc.a#ac1");
   });
 });
