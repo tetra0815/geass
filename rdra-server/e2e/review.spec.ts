@@ -102,3 +102,24 @@ test("add a principle, give the usecase acceptance criteria, and follow the badg
   await page.locator(".react-flow__node", { hasText: "注文する" }).getByRole("button", { name: "原則 1" }).click();
   await expect(page.locator("tr.focused", { hasText: "pr.audit-log" })).toBeVisible();
 });
+
+test("a decision right after an edit waits for the edited model to load", async ({ page }) => {
+  await requestAgain(await readRecord());
+  await page.route("**/api/diff", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+  await page.goto(url);
+  await expect(page.getByText("レビュー待ち")).toBeVisible();
+
+  await page.getByLabel("種類").selectOption("screens");
+  await page.getByLabel("ID", { exact: true }).fill("receipt");
+  await page.getByLabel("名前", { exact: true }).fill("注文完了画面");
+  await page.getByRole("button", { name: "追加", exact: true }).click();
+  await expect.poll(async () => readFile(join(repo, RDRA_DIR, "screens.yaml"), "utf8")).toContain("scr.receipt");
+  await page.getByLabel("コメント").fill("完了画面の文言を決めてください");
+  await page.getByRole("button", { name: "コメントを追加" }).click();
+  await page.getByRole("button", { name: "差し戻す" }).click();
+  await expect(page.getByText("差し戻し済み")).toBeVisible();
+  expect((await readRecord()).status).toBe("rejected");
+});

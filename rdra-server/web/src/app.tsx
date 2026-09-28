@@ -60,18 +60,25 @@ export function App() {
   const apply = useCallback(
     async (ops: Operation[]): Promise<boolean> => {
       if (!state) return false;
-      const res = await api.apply(state.version, ops);
-      if (res.status === 409) {
-        setToast("他の変更があったため、この編集は取り消されました。最新の状態を読み込みました。");
+      // Hold the review decision until the edited model is loaded, or it
+      // would be posted with the version from before this edit.
+      setBusy(true);
+      try {
+        const res = await api.apply(state.version, ops);
+        if (res.status === 409) {
+          setToast("他の変更があったため、この編集は取り消されました。最新の状態を読み込みました。");
+          await refresh();
+          return false;
+        }
+        if (!res.data.ok) {
+          setToast(res.data.message);
+          return false;
+        }
         await refresh();
-        return false;
+        return true;
+      } finally {
+        setBusy(false);
       }
-      if (!res.data.ok) {
-        setToast(res.data.message);
-        return false;
-      }
-      await refresh();
-      return true;
     },
     [state, refresh],
   );
