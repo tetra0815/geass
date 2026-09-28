@@ -7,7 +7,7 @@
     {
       "name": "geass",
       "source": "./",
-      "description": "Git-flow release/hotfix worktree harness for Claude Code"
+      "description": "RDRA-centric development harness for Claude Code"
     }
   ]
 }
