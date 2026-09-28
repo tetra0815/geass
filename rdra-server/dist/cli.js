@@ -28078,22 +28078,27 @@ var init_git = __esm({
 
 // src/feature.ts
 import { join as join2 } from "node:path";
+function invalidReason(branch, prefix, id) {
+  const suggestion = id.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "") || "001-name";
+  return `\u30D6\u30E9\u30F3\u30C1 ${branch} \u306F feature \u30D6\u30E9\u30F3\u30C1\uFF08${prefix}*\uFF09\u3067\u3059\u304C\u3001\u300C${id}\u300D\u306F feature ID \u306B\u4F7F\u3048\u307E\u305B\u3093\u3002feature ID \u306F\u82F1\u6570\u5B57\u3067\u59CB\u307E\u308A\u3001\u82F1\u6570\u5B57\u3068 . _ - \u3060\u3051\u304B\u3089\u306A\u308A\u3001/ \u3092\u542B\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u30D6\u30E9\u30F3\u30C1\u540D\u3092 ${prefix}<id> \u306E\u5F62\u306B\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4F8B: git branch -m ${prefix}${suggestion}\uFF09`;
+}
 async function resolveFeature(repoRoot) {
   const branch = await currentBranch(repoRoot);
   if (!branch) return null;
   const prefix = await gitConfig(repoRoot, "gitflow.prefix.feature") ?? "feature/";
   if (!branch.startsWith(prefix)) return null;
   const id = branch.slice(prefix.length);
-  if (!FEATURE_ID.test(id)) return null;
+  if (!FEATURE_ID.test(id)) return { invalid: true, branch, reason: invalidReason(branch, prefix, id) };
   return { id, branch, reviewFile: join2(repoRoot, REVIEWS_DIR, `${id}.json`) };
 }
-var REVIEWS_DIR, FEATURE_ID;
+var REVIEWS_DIR, FEATURE_ID, isInvalidFeature;
 var init_feature = __esm({
   "src/feature.ts"() {
     "use strict";
     init_git();
     REVIEWS_DIR = "docs/rdra/reviews";
     FEATURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+    isInvalidFeature = (f) => f !== null && "invalid" in f;
   }
 });
 
@@ -28171,6 +28176,7 @@ async function changedSinceApproval(repo, reviewFile, current) {
 async function checkFeatureApproval(repo) {
   const feature = await resolveFeature(repo);
   if (!feature) return { state: "outside", message: APPROVAL_MESSAGES.outside };
+  if (isInvalidFeature(feature)) return { state: "error", message: feature.reason };
   let model;
   try {
     model = parseModel(await readModelFiles(repo));
@@ -28224,7 +28230,7 @@ async function featurePlans(repoRoot, base) {
   return r.stdout.split("\0").filter((p) => p.endsWith(".md") && existsSync(join3(repoRoot, p))).sort();
 }
 function normalizePlan(text) {
-  return text.replace(/^(\s*[-*]\s+)\[[xX]\]/gm, "$1[ ]");
+  return text.replace(/^(\s*(?:[-*+]|\d{1,9}[.)])\s+)\[[xX]\]/gm, "$1[ ]");
 }
 async function planHashes(repoRoot, paths) {
   const out = {};
@@ -28328,12 +28334,14 @@ async function diffAgainstBase(repoRoot, model) {
   const baseModel = parseModel(await readModelFilesAt(repoRoot, base));
   return { base, changes: diffModels(baseModel, model) };
 }
+var NO_BASE_MESSAGE;
 var init_base_diff = __esm({
   "src/base-diff.ts"() {
     "use strict";
     init_diff();
     init_git();
     init_io();
+    NO_BASE_MESSAGE = "\u5DEE\u5206\u306E\u57FA\u70B9\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002develop \u30D6\u30E9\u30F3\u30C1\uFF08\u307E\u305F\u306F git config gitflow.branch.<branch>.base\uFF09\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044";
   }
 });
 
@@ -28368,13 +28376,17 @@ function knownRefs(model) {
 }
 function parseCovers(markdown) {
   const refs = [];
-  let inFence = false;
+  let fence = null;
   for (const line of markdown.split(/\r?\n/)) {
-    if (FENCE.test(line)) {
-      inFence = !inFence;
+    const f = FENCE.exec(line);
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = null;
       continue;
     }
-    if (inFence) continue;
+    if (f && !(f[1][0] === "`" && f[2].includes("`"))) {
+      fence = f[1];
+      continue;
+    }
     const m = COVERS_LINE.exec(line);
     if (!m) continue;
     for (const token of m[1].split(/[\s,、]+/)) {
@@ -28408,7 +28420,7 @@ var init_trace = __esm({
     init_kinds();
     NOT_TRACED = ["engineering", "technology"];
     COVERS_LINE = /^\s*(?:[-*]\s+)?(?:\*\*)?Covers(?:\*\*)?:(?:\*\*)?\s*(.*)$/;
-    FENCE = /^\s*(```|~~~)/;
+    FENCE = /^\s*(`{3,}|~{3,})(.*)$/;
   }
 });
 
@@ -28418,6 +28430,7 @@ import { join as join4 } from "node:path";
 async function runTrace(repoRoot, now) {
   const feature = await resolveFeature(repoRoot);
   if (!feature) return { status: "error", message: "feature \u30D6\u30E9\u30F3\u30C1\uFF08feature/*\uFF09\u306E\u5916\u3067\u306F trace \u3067\u304D\u307E\u305B\u3093" };
+  if (isInvalidFeature(feature)) return { status: "error", message: feature.reason };
   let model;
   let diff;
   try {
@@ -28427,12 +28440,7 @@ async function runTrace(repoRoot, now) {
     if (e instanceof ModelParseError) return { status: "error", message: `RDRA \u306E YAML \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}` };
     throw e;
   }
-  if (!diff.base) {
-    return {
-      status: "error",
-      message: "\u5DEE\u5206\u306E\u57FA\u70B9\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002develop \u30D6\u30E9\u30F3\u30C1\uFF08\u307E\u305F\u306F git config gitflow.branch.<branch>.base\uFF09\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-    };
-  }
+  if (!diff.base) return { status: "error", message: NO_BASE_MESSAGE };
   const plans = await featurePlans(repoRoot, diff.base);
   if (plans.length === 0) {
     return {
@@ -32450,7 +32458,8 @@ async function startHttp(deps, port = 0) {
   store.on("layout", onLayout);
   reviewEvents.on("review", onReview);
   async function state() {
-    const feature = await resolveFeature(store.repoRoot);
+    const resolved = await resolveFeature(store.repoRoot);
+    const feature = isInvalidFeature(resolved) ? null : resolved;
     const review = feature ? await readReview(feature.reviewFile) : null;
     return {
       version: store.version,
@@ -32489,6 +32498,7 @@ async function startHttp(deps, port = 0) {
     const comments = Array.isArray(body.comments) ? body.comments : [];
     const feature = await resolveFeature(store.repoRoot);
     if (!feature) throw new HttpError(404, "feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093");
+    if (isInvalidFeature(feature)) throw new HttpError(404, `\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093: ${feature.reason}`);
     const record2 = await store.exclusive(async () => {
       if (body.version !== store.version) throw new HttpError(409, "\u30EC\u30D3\u30E5\u30FC\u4E2D\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002\u6700\u65B0\u306E\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044");
       if (decision === "approved" && (store.parseError || hasErrors(validate2(store.model)))) {
@@ -42173,8 +42183,8 @@ ${USAGE}`);
   if (command === "check-approval" && repo) return checkApproval(repo, io);
   if (command === "wait-review" && repo) {
     const feature = await resolveFeature(repo);
-    if (!feature) {
-      io.out(JSON.stringify({ state: "error", message: APPROVAL_MESSAGES.outside }) + "\n");
+    if (!feature || isInvalidFeature(feature)) {
+      io.out(JSON.stringify({ state: "error", message: feature ? feature.reason : APPROVAL_MESSAGES.outside }) + "\n");
       return 3;
     }
     return waitReview(feature.reviewFile, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);

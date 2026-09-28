@@ -33446,33 +33446,40 @@ async function diffAgainstBase(repoRoot, model) {
   const baseModel = parseModel(await readModelFilesAt(repoRoot, base));
   return { base, changes: diffModels(baseModel, model) };
 }
+var NO_BASE_MESSAGE;
 var init_base_diff = __esm({
   "src/base-diff.ts"() {
     "use strict";
     init_diff();
     init_git();
     init_io();
+    NO_BASE_MESSAGE = "\u5DEE\u5206\u306E\u57FA\u70B9\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002develop \u30D6\u30E9\u30F3\u30C1\uFF08\u307E\u305F\u306F git config gitflow.branch.<branch>.base\uFF09\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044";
   }
 });
 
 // src/feature.ts
 import { join as join2 } from "node:path";
+function invalidReason(branch, prefix, id) {
+  const suggestion = id.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "") || "001-name";
+  return `\u30D6\u30E9\u30F3\u30C1 ${branch} \u306F feature \u30D6\u30E9\u30F3\u30C1\uFF08${prefix}*\uFF09\u3067\u3059\u304C\u3001\u300C${id}\u300D\u306F feature ID \u306B\u4F7F\u3048\u307E\u305B\u3093\u3002feature ID \u306F\u82F1\u6570\u5B57\u3067\u59CB\u307E\u308A\u3001\u82F1\u6570\u5B57\u3068 . _ - \u3060\u3051\u304B\u3089\u306A\u308A\u3001/ \u3092\u542B\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u30D6\u30E9\u30F3\u30C1\u540D\u3092 ${prefix}<id> \u306E\u5F62\u306B\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4F8B: git branch -m ${prefix}${suggestion}\uFF09`;
+}
 async function resolveFeature(repoRoot) {
   const branch = await currentBranch(repoRoot);
   if (!branch) return null;
   const prefix = await gitConfig(repoRoot, "gitflow.prefix.feature") ?? "feature/";
   if (!branch.startsWith(prefix)) return null;
   const id = branch.slice(prefix.length);
-  if (!FEATURE_ID.test(id)) return null;
+  if (!FEATURE_ID.test(id)) return { invalid: true, branch, reason: invalidReason(branch, prefix, id) };
   return { id, branch, reviewFile: join2(repoRoot, REVIEWS_DIR, `${id}.json`) };
 }
-var REVIEWS_DIR, FEATURE_ID;
+var REVIEWS_DIR, FEATURE_ID, isInvalidFeature;
 var init_feature = __esm({
   "src/feature.ts"() {
     "use strict";
     init_git();
     REVIEWS_DIR = "docs/rdra/reviews";
     FEATURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+    isInvalidFeature = (f) => f !== null && "invalid" in f;
   }
 });
 
@@ -33832,7 +33839,8 @@ async function startHttp(deps, port = 0) {
   store.on("layout", onLayout);
   reviewEvents.on("review", onReview);
   async function state() {
-    const feature = await resolveFeature(store.repoRoot);
+    const resolved = await resolveFeature(store.repoRoot);
+    const feature = isInvalidFeature(resolved) ? null : resolved;
     const review = feature ? await readReview(feature.reviewFile) : null;
     return {
       version: store.version,
@@ -33871,6 +33879,7 @@ async function startHttp(deps, port = 0) {
     const comments = Array.isArray(body.comments) ? body.comments : [];
     const feature = await resolveFeature(store.repoRoot);
     if (!feature) throw new HttpError(404, "feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093");
+    if (isInvalidFeature(feature)) throw new HttpError(404, `\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093: ${feature.reason}`);
     const record2 = await store.exclusive(async () => {
       if (body.version !== store.version) throw new HttpError(409, "\u30EC\u30D3\u30E5\u30FC\u4E2D\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002\u6700\u65B0\u306E\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044");
       if (decision === "approved" && (store.parseError || hasErrors(validate2(store.model)))) {
@@ -49642,7 +49651,14 @@ function createMcpServer(deps) {
     const result = await store.apply(ops);
     return result.ok ? json2(result) : fail(`${result.reason}: ${result.message}`);
   };
-  const featureIssues = async () => validateChanges((await diffAgainstBase(store.repoRoot, store.model)).changes);
+  const featureIssues = async () => {
+    const diff = await diffAgainstBase(store.repoRoot, store.model);
+    if (!diff.base) {
+      const feature = await resolveFeature(store.repoRoot);
+      if (feature && !isInvalidFeature(feature)) return null;
+    }
+    return validateChanges(diff.changes);
+  };
   server.registerTool(
     "rdra_get_model",
     {
@@ -49678,7 +49694,9 @@ function createMcpServer(deps) {
     { description: "RDRA \u30E2\u30C7\u30EB\u306E\u6574\u5408\u6027\u30C1\u30A7\u30C3\u30AF\u3002issues \u306E error \u3068 featureIssues\uFF08\u3053\u306E feature \u306E\u5DEE\u5206\u306B\u5BFE\u3059\u308B\u691C\u67FB\uFF09\u306F\u30EC\u30D3\u30E5\u30FC\u4F9D\u983C\u3092\u59A8\u3052\u3001warning \u306F\u59A8\u3052\u306A\u3044\u3002", inputSchema: {} },
     async () => {
       try {
-        return json2({ parseError: store.parseError?.message ?? null, issues: validate2(store.model), featureIssues: await featureIssues() });
+        const changeIssues = await featureIssues();
+        if (!changeIssues) return fail(`\u3053\u306E feature \u306E\u5DEE\u5206\u3092\u691C\u67FB\u3067\u304D\u307E\u305B\u3093: ${NO_BASE_MESSAGE}`);
+        return json2({ parseError: store.parseError?.message ?? null, issues: validate2(store.model), featureIssues: changeIssues });
       } catch (e) {
         if (e instanceof ModelParseError) return fail(`\u5206\u5C90\u70B9\u306E RDRA \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
         throw e;
@@ -49740,6 +49758,7 @@ function createMcpServer(deps) {
       if (!feature) {
         return fail("feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093\u3002feature/* \u30D6\u30E9\u30F3\u30C1\uFF08/feature-start \u3067\u4F5C\u3063\u305F worktree\uFF09\u3067\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044");
       }
+      if (isInvalidFeature(feature)) return fail(`\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093: ${feature.reason}`);
       if (store.parseError) return fail(`YAML \u306B\u30A8\u30E9\u30FC\u304C\u3042\u308A\u307E\u3059: ${store.parseError.message}`);
       const issues = validate2(store.model);
       if (hasErrors(issues)) {
@@ -49754,6 +49773,7 @@ ${errors.join("\n")}`);
         if (e instanceof ModelParseError) return fail(`\u5206\u5C90\u70B9\u306E RDRA \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
         throw e;
       }
+      if (!blockers) return fail(`\u53D7\u3051\u5165\u308C\u6761\u4EF6\u3092\u691C\u67FB\u3067\u304D\u306A\u3044\u305F\u3081\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093: ${NO_BASE_MESSAGE}`);
       if (blockers.length > 0) {
         return fail(`\u53D7\u3051\u5165\u308C\u6761\u4EF6\u304C\u8DB3\u308A\u306A\u3044\u305F\u3081\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093:
 ${blockers.map((i) => `- ${i.message}`).join("\n")}`);
@@ -49772,7 +49792,10 @@ ${blockers.map((i) => `- ${i.message}`).join("\n")}`);
     { description: "\u30EC\u30D3\u30E5\u30FC\u306E\u72B6\u614B\uFF08none / pending / approved / rejected\uFF09\u3068\u3001\u6700\u5F8C\u306E\u5224\u65AD\u306E\u30B3\u30E1\u30F3\u30C8\u3002approval \u304C stale \u306A\u3089\u627F\u8A8D\u5F8C\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u3066\u3044\u308B\u3002", inputSchema: {} },
     async () => {
       const feature = await resolveFeature(store.repoRoot);
-      if (!feature) return json2({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note: "feature \u306E\u5916\u3067\u3059" });
+      if (!feature || isInvalidFeature(feature)) {
+        const note = feature ? feature.reason : "feature \u306E\u5916\u3067\u3059";
+        return json2({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note });
+      }
       const record2 = await readReview(feature.reviewFile);
       return json2({
         status: record2.status,
