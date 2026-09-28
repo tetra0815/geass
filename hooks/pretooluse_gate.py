@@ -12,12 +12,15 @@ This hook only picks the tool calls that need a decision:
 
 Everything else passes without starting node. A gated call whose decision
 cannot be obtained is denied: an approval that cannot be verified must not
-be treated as granted.
+be treated as granted, and neither may an unexpected error while deciding
+(Claude Code runs the tool when a hook crashes). The hook keeps to Python 3.8
+syntax because macOS still ships Python 3.9 as /usr/bin/python3.
 """
 import json
 import os
 import subprocess
 import sys
+from typing import List, Optional
 
 GATED_SKILLS = {"writing-plans", "executing-plans", "subagent-driven-development"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit"}
@@ -42,7 +45,7 @@ def repo_root_of_cwd() -> str:
     return out or os.getcwd()
 
 
-def gate_problem(args: list) -> str | None:
+def gate_problem(args: List[str]) -> Optional[str]:
     """Return a deny reason, or None when the gate allows the call."""
     plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
     cli = os.path.join(plugin_root, "rdra-server", "dist", "cli.js")
@@ -74,29 +77,39 @@ def gate_problem(args: list) -> str | None:
     return unverifiable
 
 
-def main() -> int:
-    data = json.load(sys.stdin)
+def gate_args(data: object) -> Optional[List[str]]:
+    """Return the `gate` arguments for a call that needs a decision, else None."""
+    if not isinstance(data, dict):
+        return None
     tool_name = data.get("tool_name")
     tool_input = data.get("tool_input")
     if not isinstance(tool_input, dict):
-        return 0
+        return None
 
     if tool_name in EDIT_TOOLS:
         path = tool_input.get("file_path")
         if not isinstance(path, str) or not path:
-            return 0
+            return None
         absolute = os.path.abspath(path)
         if REVIEWS_SEGMENT not in absolute.replace(os.sep, "/"):
-            return 0
-        problem = gate_problem(["--path", absolute])
-    elif tool_name == "Skill":
+            return None
+        return ["--path", absolute]
+    if tool_name == "Skill":
         skill = tool_input.get("skill")
         if not isinstance(skill, str) or skill.rsplit(":", 1)[-1] not in GATED_SKILLS:
-            return 0
-        problem = gate_problem(["--skill", skill])
-    else:
-        return 0
+            return None
+        return ["--skill", skill]
+    return None
 
+
+def main() -> int:
+    args = gate_args(json.load(sys.stdin))
+    if args is None:
+        return 0
+    try:
+        problem = gate_problem(args)
+    except Exception as e:  # a gated call must never be allowed by a crash
+        problem = f"geass のゲートを確認できません: {e!r}"
     if problem:
         print(json.dumps(deny(problem)))
     return 0
