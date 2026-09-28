@@ -68,7 +68,7 @@ describe("serializeModel", () => {
     const files = serializeModel(parseModel({ "usecases.yaml": "- id: uc.a\n  name: A\n" }));
     expect(files["usecases.yaml"]).toBe("- id: uc.a\n  name: A\n");
     expect(files["actors.yaml"]).toBe("[]\n");
-    expect(Object.keys(files)).toHaveLength(8);
+    expect(Object.keys(files)).toHaveLength(9);
   });
 });
 
@@ -82,8 +82,8 @@ describe("file io", () => {
     const dir = await mkdtemp(join(tmpdir(), "rdra-io-"));
     const files = serializeModel(sampleModel());
     const written = await writeModelFiles(dir, files, {});
-    expect(written).toHaveLength(8);
-    expect((await readdir(join(dir, RDRA_DIR))).sort()).toHaveLength(8);
+    expect(written).toHaveLength(9);
+    expect((await readdir(join(dir, RDRA_DIR))).sort()).toHaveLength(9);
 
     const changed = { ...files, "screens.yaml": "- id: scr.top\n  name: トップ\n" };
     expect(await writeModelFiles(dir, changed, files)).toEqual(["screens.yaml"]);

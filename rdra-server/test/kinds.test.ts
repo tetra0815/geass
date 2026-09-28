@@ -4,6 +4,7 @@ import {
   KINDS,
   UsecaseSchema,
   StateModelSchema,
+  PrincipleSchema,
   emptyModel,
   findElement,
   kindOfId,
@@ -45,6 +46,7 @@ describe("kinds", () => {
     expect(kindOfId("uc.place-order")?.key).toBe("usecases");
     expect(kindOfId("st.order")?.key).toBe("states");
     expect(kindOfId("zz.x")).toBeUndefined();
+    expect(kindOfId("pr.tdd")?.key).toBe("principles");
     expect(KINDS.map((k) => k.file)).toEqual([
       "actors.yaml",
       "external-systems.yaml",
@@ -54,6 +56,7 @@ describe("kinds", () => {
       "events.yaml",
       "information.yaml",
       "states.yaml",
+      "principles.yaml",
     ]);
   });
 
@@ -62,5 +65,18 @@ describe("kinds", () => {
     m.screens.push({ id: "scr.cart", name: "カート" });
     expect(findElement(m, "scr.cart")?.index).toBe(0);
     expect(findElement(m, "scr.none")).toBeUndefined();
+  });
+
+  it("accepts a principle with defaults and rejects unknown categories and levels", () => {
+    expect(PrincipleSchema.parse({ id: "pr.tdd", name: "TDD", category: "engineering", level: "must" })).toEqual({
+      id: "pr.tdd",
+      name: "TDD",
+      category: "engineering",
+      level: "must",
+      scope: [],
+    });
+    expect(PrincipleSchema.safeParse({ id: "pr.x", name: "X", category: "legal", level: "must" }).success).toBe(false);
+    expect(PrincipleSchema.safeParse({ id: "pr.x", name: "X", category: "security", level: "may" }).success).toBe(false);
+    expect(PrincipleSchema.safeParse({ id: "pr.x", name: "X", level: "must" }).success).toBe(false);
   });
 });

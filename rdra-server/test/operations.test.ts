@@ -86,4 +86,12 @@ describe("applyOperations", () => {
       applyOperations(sampleModel(), [{ op: "unlink", relation: "uc.screen", from: "uc.place-order", to: "scr.none" }]),
     ).toThrow(OperationError);
   });
+
+  it("detaches principle scopes when the target is deleted", () => {
+    const model = sampleModel();
+    model.principles.push({ id: "pr.audit", name: "監査", category: "security", level: "must", scope: ["uc.place-order"] });
+    const { model: next, removedRelations } = applyOperations(model, [{ op: "delete", id: "uc.place-order" }]);
+    expect(next.principles[0].scope).toEqual([]);
+    expect(removedRelations).toContainEqual({ from: "pr.audit", to: "uc.place-order", kind: "pr.scope", attrs: {} });
+  });
 });

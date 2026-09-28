@@ -89,4 +89,30 @@ describe("validate", () => {
       "usecase-without-io",
     ]);
   });
+
+  describe("principles", () => {
+    const withPrinciples = (yaml: string) => ({ ...sampleFiles(), "principles.yaml": yaml });
+
+    it("links principles to their scope and accepts a valid model", () => {
+      const files = withPrinciples(
+        "- id: pr.audit\n  name: 監査ログ\n  description: 全更新を記録する\n  category: security\n  level: must\n  scope: [uc.place-order, inf.order]\n",
+      );
+      expect(relationsOf(parseModel(files))).toContainEqual({ from: "pr.audit", to: "uc.place-order", kind: "pr.scope", attrs: {} });
+      expect(codes(files)).toEqual([]);
+    });
+
+    it("flags dangling and wrong-kind scope targets", () => {
+      const files = withPrinciples(
+        "- id: pr.a\n  name: A\n  description: d\n  category: security\n  level: must\n  scope: [uc.none, evt.payment-request]\n",
+      );
+      expect(codes(files)).toEqual(expect.arrayContaining(["error:dangling-ref:pr.a", "error:wrong-kind-ref:pr.a"]));
+    });
+
+    it("warns about must principles without a description", () => {
+      const files = withPrinciples(
+        "- id: pr.a\n  name: A\n  category: quality\n  level: must\n- id: pr.b\n  name: B\n  category: quality\n  level: should\n",
+      );
+      expect(codes(files)).toEqual(["warning:principle-without-description:pr.a"]);
+    });
+  });
 });

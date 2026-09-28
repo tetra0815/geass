@@ -100,7 +100,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_upsert",
     {
       description:
-        "要素を追加または更新する（既存 ID なら指定したフィールドだけを上書き）。kind: actors, externalSystems, bucs, usecases, screens, events, information, states。ID は <接頭辞>.<スラッグ>（act, ext, buc, uc, scr, evt, inf, st）。",
+        "要素を追加または更新する（既存 ID なら指定したフィールドだけを上書き）。kind: actors, externalSystems, bucs, usecases, screens, events, information, states, principles。ID は <接頭辞>.<スラッグ>（act, ext, buc, uc, scr, evt, inf, st, pr）。principles は category（business/quality/security/engineering/technology）と level（must/should）が必須。usecases の acceptance は [{id, given?, when, then}]。",
       inputSchema: {
         items: z.array(z.object({ kind: z.enum(KIND_KEYS), element: z.record(z.string(), z.unknown()) })).min(1),
       },
@@ -118,7 +118,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_link",
     {
       description:
-        "関連を張る。relation は起点の種別で決まる（例: uc.screen は uc -> scr）。uc.information には attrs.access（create/read/update/delete）が必要。uc.transition の to は st.<モデル>:<状態>-><状態>。inf.related には任意で attrs.label。",
+        "関連を張る。relation は起点の種別で決まる（例: uc.screen は uc -> scr）。uc.information には attrs.access（create/read/update/delete）が必要。uc.transition の to は st.<モデル>:<状態>-><状態>。inf.related には任意で attrs.label。pr.scope は pr -> act/ext/buc/uc/scr/inf/st（原則がかかる要素）。",
       inputSchema: {
         links: z.array(linkShape.extend({ attrs: z.record(z.string(), z.string()).optional() })).min(1),
       },

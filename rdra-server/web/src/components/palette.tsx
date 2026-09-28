@@ -8,12 +8,13 @@ interface Props {
 }
 
 const slugPattern = new RegExp(`^${SLUG}$`);
+const ADDABLE = KINDS.filter((k) => k.key !== "principles");
 
 export function Palette({ disabled, onApply }: Props) {
   const [kind, setKind] = useState<KindKey>("usecases");
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
-  const prefix = KINDS.find((k) => k.key === kind)!.prefix;
+  const prefix = ADDABLE.find((k) => k.key === kind)!.prefix;
   const valid = slugPattern.test(slug) && name.trim() !== "";
 
   const add = async () => {
@@ -34,7 +35,7 @@ export function Palette({ disabled, onApply }: Props) {
       <label>
         種類
         <select aria-label="種類" value={kind} disabled={disabled} onChange={(e) => setKind(e.target.value as KindKey)}>
-          {KINDS.map((k) => (
+          {ADDABLE.map((k) => (
             <option key={k.key} value={k.key}>
               {k.label}
             </option>

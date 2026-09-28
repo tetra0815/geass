@@ -77,6 +77,15 @@ describe("MCP tools", () => {
     ]);
     const issues = (await call("rdra_validate")).json().issues.map((i: { code: string }) => i.code);
     expect(issues).toContain("usecase-without-io");
+    expect(
+      (
+        await call("rdra_upsert", {
+          items: [{ kind: "principles", element: { id: "pr.audit", name: "監査", description: "d", category: "security", level: "must" } }],
+        })
+      ).isError,
+    ).toBe(false);
+    expect((await call("rdra_link", { links: [{ relation: "pr.scope", from: "pr.audit", to: "uc.browse" }] })).isError).toBe(false);
+    expect((await call("rdra_get_model", { kind: "principles" })).json().model.principles[0].scope).toEqual(["uc.browse"]);
   });
 
   it("returns errors for invalid edits and bad SQL", async () => {

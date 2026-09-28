@@ -85,5 +85,12 @@ export function validate(model: Model): Issue[] {
       if (!usedTransitions.has(ref)) warn("unused-transition", `${ref} を起こすユースケースがありません`, sm.id);
     }
   }
+
+  for (const p of model.principles) {
+    if (p.level === "must" && !p.description?.trim()) {
+      warn("principle-without-description", `${p.id} は MUST ですが、何を満たせば守ったことになるか（説明）がありません`, p.id);
+    }
+  }
+
   return issues;
 }
