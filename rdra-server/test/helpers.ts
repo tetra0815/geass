@@ -25,3 +25,18 @@ export async function makeRepo(files: Record<string, string> = {}): Promise<stri
   run(dir, "git", ["commit", "-q", "-m", "init"]);
   return dir;
 }
+
+/** A repo on `feature/team/42-x`: it has the feature prefix but not a valid feature id. */
+export async function makeInvalidFeatureRepo(files: Record<string, string> = {}): Promise<string> {
+  const dir = await makeRepo(files);
+  run(dir, "git", ["branch", "develop"]);
+  run(dir, "git", ["checkout", "-q", "-b", "feature/team/42-x"]);
+  return dir;
+}
+
+export async function makeFeatureRepo(files: Record<string, string> = {}, id = "001-demo"): Promise<string> {
+  const dir = await makeRepo(files);
+  run(dir, "git", ["branch", "develop"]);
+  run(dir, "git", ["checkout", "-q", "-b", `feature/${id}`]);
+  return dir;
+}

@@ -12,6 +12,7 @@ export const KIND_KEYS = [
   "events",
   "information",
   "states",
+  "principles",
 ] as const;
 export type KindKey = (typeof KIND_KEYS)[number];
 
@@ -26,6 +27,18 @@ function common(prefix: string) {
 const idList = () => z.array(z.string()).default(() => []);
 
 export const AccessSchema = z.enum(["create", "read", "update", "delete"]);
+
+export const AcceptanceSchema = z.strictObject({
+  id: z.string().regex(slugPattern, "受け入れ条件の id はスラッグ（英小文字・数字・ハイフン）にしてください"),
+  given: z.string().optional(),
+  when: z.string(),
+  then: z.string(),
+});
+export type Acceptance = z.output<typeof AcceptanceSchema>;
+
+export function acceptanceRef(usecaseId: string, acId: string): string {
+  return `${usecaseId}#${acId}`;
+}
 
 export const ActorSchema = z.strictObject({ ...common("act") });
 export const ExternalSystemSchema = z.strictObject({ ...common("ext") });
@@ -43,6 +56,7 @@ export const UsecaseSchema = z.strictObject({
   events: idList(),
   information: z.array(z.strictObject({ ref: z.string(), access: AccessSchema })).default(() => []),
   transitions: idList(),
+  acceptance: z.array(AcceptanceSchema).default(() => []),
 });
 export const EventSchema = z.strictObject({
   ...common("evt"),
@@ -63,6 +77,16 @@ export const StateModelSchema = z.strictObject({
   transitions: z.array(z.strictObject({ from: z.string(), to: z.string() })).default(() => []),
 });
 
+export const PRINCIPLE_CATEGORIES = ["business", "quality", "security", "engineering", "technology"] as const;
+export const PrincipleCategorySchema = z.enum(PRINCIPLE_CATEGORIES);
+export const PrincipleLevelSchema = z.enum(["must", "should"]);
+export const PrincipleSchema = z.strictObject({
+  ...common("pr"),
+  category: PrincipleCategorySchema,
+  level: PrincipleLevelSchema,
+  scope: idList(),
+});
+
 export type Actor = z.output<typeof ActorSchema>;
 export type ExternalSystem = z.output<typeof ExternalSystemSchema>;
 export type Screen = z.output<typeof ScreenSchema>;
@@ -71,6 +95,7 @@ export type Usecase = z.output<typeof UsecaseSchema>;
 export type RdraEvent = z.output<typeof EventSchema>;
 export type Information = z.output<typeof InformationSchema>;
 export type StateModel = z.output<typeof StateModelSchema>;
+export type Principle = z.output<typeof PrincipleSchema>;
 
 export interface Model {
   actors: Actor[];
@@ -81,6 +106,7 @@ export interface Model {
   events: RdraEvent[];
   information: Information[];
   states: StateModel[];
+  principles: Principle[];
 }
 export type AnyElement = Model[KindKey][number];
 
@@ -102,6 +128,7 @@ export const KINDS: readonly KindDef[] = [
   { key: "events", prefix: "evt", file: "events.yaml", table: "events", label: "イベント", schema: EventSchema },
   { key: "information", prefix: "inf", file: "information.yaml", table: "information", label: "情報", schema: InformationSchema },
   { key: "states", prefix: "st", file: "states.yaml", table: "state_models", label: "状態モデル", schema: StateModelSchema },
+  { key: "principles", prefix: "pr", file: "principles.yaml", table: "principles", label: "原則", schema: PrincipleSchema },
 ];
 
 export function kindDef(key: KindKey): KindDef {
@@ -116,7 +143,7 @@ export function kindOfId(id: string): KindDef | undefined {
 }
 
 export function emptyModel(): Model {
-  return { actors: [], externalSystems: [], bucs: [], usecases: [], screens: [], events: [], information: [], states: [] };
+  return { actors: [], externalSystems: [], bucs: [], usecases: [], screens: [], events: [], information: [], states: [], principles: [] };
 }
 
 export function findElement(

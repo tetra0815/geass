@@ -263,3 +263,50 @@ button.link {
   stroke: #cf222e !important;
   stroke-dasharray: 6 4;
 }
+
+.principles-page {
+  padding: 16px;
+  overflow: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+.principle-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+.principle-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+table.principles {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  margin-bottom: 16px;
+}
+table.principles th,
+table.principles td {
+  border: 1px solid #d0d7de;
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+table.principles tr.focused {
+  background: #ddf4ff;
+}
+.level-must {
+  font-weight: bold;
+  color: #cf222e;
+}
+.badge {
+  margin-left: 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  border-radius: 999px;
+  border-color: #cf222e;
+  color: #cf222e;
+}

@@ -1,19 +1,45 @@
-import { readFile } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
-import { currentBranch } from "./git.js";
+import { join } from "node:path";
+import { currentBranch, gitConfig } from "./git.js";
 
-const FEATURE_BRANCH = /^(\d{8}-\d{6}-[a-z0-9-]+|\d{3}-[a-z0-9-]+)$/;
+export const REVIEWS_DIR = "docs/rdra/reviews";
 
-export async function resolveFeatureDir(repoRoot: string, env: NodeJS.ProcessEnv = process.env): Promise<string | null> {
-  const absolute = (p: string) => (isAbsolute(p) ? p : join(repoRoot, p));
-  if (env.SPECIFY_FEATURE_DIRECTORY) return absolute(env.SPECIFY_FEATURE_DIRECTORY);
-  try {
-    const data = JSON.parse(await readFile(join(repoRoot, ".geass", "feature.json"), "utf8")) as { feature_directory?: unknown };
-    if (typeof data.feature_directory === "string" && data.feature_directory) return absolute(data.feature_directory);
-  } catch {
-    // missing or unreadable feature.json: fall through to the branch name
-  }
+export interface Feature {
+  id: string;
+  branch: string;
+  reviewFile: string;
+}
+
+/** A branch with the feature prefix whose remainder is not a usable feature id. */
+export interface InvalidFeature {
+  invalid: true;
+  branch: string;
+  reason: string;
+}
+
+const FEATURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+export const isInvalidFeature = (f: Feature | InvalidFeature | null): f is InvalidFeature => f !== null && "invalid" in f;
+
+function invalidReason(branch: string, prefix: string, id: string): string {
+  const suggestion = id.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "") || "001-name";
+  return (
+    `ブランチ ${branch} は feature ブランチ（${prefix}*）ですが、「${id}」は feature ID に使えません。` +
+    `feature ID は英数字で始まり、英数字と . _ - だけからなり、/ を含められません。` +
+    `ブランチ名を ${prefix}<id> の形に変更してください（例: git branch -m ${prefix}${suggestion}）`
+  );
+}
+
+/**
+ * The feature of the current branch: null outside the feature prefix (develop,
+ * hotfix/*, detached HEAD), an InvalidFeature when the branch has the prefix
+ * but no usable id — callers must refuse, not treat it as outside.
+ */
+export async function resolveFeature(repoRoot: string): Promise<Feature | InvalidFeature | null> {
   const branch = await currentBranch(repoRoot);
-  if (branch && FEATURE_BRANCH.test(branch)) return join(repoRoot, "specs", branch);
-  return null;
+  if (!branch) return null;
+  const prefix = (await gitConfig(repoRoot, "gitflow.prefix.feature")) ?? "feature/";
+  if (!branch.startsWith(prefix)) return null;
+  const id = branch.slice(prefix.length);
+  if (!FEATURE_ID.test(id)) return { invalid: true, branch, reason: invalidReason(branch, prefix, id) };
+  return { id, branch, reviewFile: join(repoRoot, REVIEWS_DIR, `${id}.json`) };
 }

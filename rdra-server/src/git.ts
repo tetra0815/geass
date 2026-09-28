@@ -24,33 +24,25 @@ export async function currentBranch(repoRoot: string): Promise<string | null> {
   return r.ok && r.stdout.trim() ? r.stdout.trim() : null;
 }
 
-export async function rootWorktreeBranch(repoRoot: string): Promise<string | null> {
-  const r = await git(repoRoot, ["worktree", "list", "--porcelain"]);
-  if (!r.ok) return null;
-  for (const line of r.stdout.split("\n")) {
-    if (line.startsWith("branch refs/heads/")) return line.slice("branch refs/heads/".length);
-    if (line === "detached" || line === "") return null;
-  }
-  return null;
+export async function gitConfig(repoRoot: string, key: string): Promise<string | null> {
+  const r = await git(repoRoot, ["config", "--get", key]);
+  const value = r.stdout.trim();
+  return r.ok && value ? value : null;
 }
 
-export function baseCommitConfigKey(branch: string): string {
-  return `branch.${branch}.geass-base-commit`;
+async function verifiedCommit(repoRoot: string, ref: string): Promise<boolean> {
+  return (await git(repoRoot, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).ok;
 }
 
 export async function resolveBaseCommit(repoRoot: string): Promise<string | null> {
   const branch = await currentBranch(repoRoot);
-  if (branch) {
-    const configured = await git(repoRoot, ["config", "--get", baseCommitConfigKey(branch)]);
-    const value = configured.stdout.trim();
-    if (configured.ok && value) {
-      const verified = await git(repoRoot, ["rev-parse", "--verify", "--quiet", `${value}^{commit}`]);
-      if (verified.ok) return verified.stdout.trim();
-    }
-  }
-  const root = await rootWorktreeBranch(repoRoot);
-  if (root && root !== branch) {
-    const mb = await git(repoRoot, ["merge-base", "HEAD", root]);
+  if (!branch) return null;
+  const base =
+    (await gitConfig(repoRoot, `gitflow.branch.${branch}.base`)) ?? (await gitConfig(repoRoot, "gitflow.branch.develop")) ?? "develop";
+  if (base === branch) return null;
+  for (const ref of [`refs/remotes/origin/${base}`, `refs/heads/${base}`]) {
+    if (!(await verifiedCommit(repoRoot, ref))) continue;
+    const mb = await git(repoRoot, ["merge-base", "HEAD", ref]);
     if (mb.ok && mb.stdout.trim()) return mb.stdout.trim();
   }
   return null;

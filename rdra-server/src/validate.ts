@@ -1,4 +1,5 @@
-import { KINDS, type Model } from "./model/kinds.js";
+import type { ElementChange } from "./diff.js";
+import { KINDS, type Model, type Usecase } from "./model/kinds.js";
 import {
   RELATION_TARGET_PREFIXES,
   formatTransitionRef,
@@ -75,6 +76,14 @@ export function validate(model: Model): Issue[] {
       warn("usecase-without-io", `${uc.id} に画面もイベントも紐づいていません`, uc.id);
     }
     if (!inBuc.has(uc.id)) warn("usecase-without-buc", `${uc.id} がどの BUC にも属していません`, uc.id);
+    const acIds = new Set<string>();
+    for (const ac of uc.acceptance) {
+      if (acIds.has(ac.id)) error("duplicate-acceptance", `${uc.id} の受け入れ条件 ${ac.id} が重複しています`, uc.id);
+      acIds.add(ac.id);
+      if (!ac.when.trim() || !ac.then.trim()) {
+        error("empty-acceptance", `${uc.id} の受け入れ条件 ${ac.id} の when / then が空です`, uc.id);
+      }
+    }
   }
   for (const info of model.information) {
     if (!usedInformation.has(info.id)) warn("unused-information", `${info.id} を扱うユースケースがありません`, info.id);
@@ -85,5 +94,23 @@ export function validate(model: Model): Issue[] {
       if (!usedTransitions.has(ref)) warn("unused-transition", `${ref} を起こすユースケースがありません`, sm.id);
     }
   }
+
+  for (const p of model.principles) {
+    if (p.level === "must" && !p.description?.trim()) {
+      warn("principle-without-description", `${p.id} は MUST ですが、何を満たせば守ったことになるか（説明）がありません`, p.id);
+    }
+  }
+
   return issues;
+}
+
+export function validateChanges(changes: ElementChange[]): Issue[] {
+  return changes
+    .filter((c) => c.kind === "usecases" && c.type !== "removed" && (c.after as Usecase).acceptance.length === 0)
+    .map((c) => ({
+      level: "error" as const,
+      code: "usecase-without-acceptance",
+      message: `${c.id} に受け入れ条件がありません（この feature で追加・変更したユースケースには 1 件以上必要です）`,
+      elementId: c.id,
+    }));
 }

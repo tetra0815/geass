@@ -3,13 +3,13 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
+import { REVIEWS_DIR } from "../src/feature.js";
 import { createMcpServer } from "../src/mcp.js";
 import { RDRA_DIR } from "../src/model/io.js";
 import { QueryIndex } from "../src/query.js";
-import { REVIEW_FILE } from "../src/review.js";
 import { RdraStore } from "../src/store.js";
 import { sampleFiles } from "./fixtures.js";
-import { makeRepo, run } from "./helpers.js";
+import { makeFeatureRepo, makeInvalidFeatureRepo, makeRepo, run } from "./helpers.js";
 
 const rdraFiles = () => Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
 const cleanups: (() => void)[] = [];
@@ -17,7 +17,7 @@ afterEach(() => {
   while (cleanups.length) cleanups.pop()!();
 });
 
-async function connect(repo: string, env: NodeJS.ProcessEnv = {}, onReviewChange?: () => void) {
+async function connect(repo: string, onReviewChange?: () => void) {
   const store = await RdraStore.open(repo);
   cleanups.push(() => store.close());
   const server = createMcpServer({
@@ -25,7 +25,6 @@ async function connect(repo: string, env: NodeJS.ProcessEnv = {}, onReviewChange
     index: new QueryIndex(),
     reviewUrl: () => "http://127.0.0.1:1234/",
     now: () => "2026-09-25T10:00:00+09:00",
-    env,
     onReviewChange,
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -78,6 +77,15 @@ describe("MCP tools", () => {
     ]);
     const issues = (await call("rdra_validate")).json().issues.map((i: { code: string }) => i.code);
     expect(issues).toContain("usecase-without-io");
+    expect(
+      (
+        await call("rdra_upsert", {
+          items: [{ kind: "principles", element: { id: "pr.audit", name: "監査", description: "d", category: "security", level: "must" } }],
+        })
+      ).isError,
+    ).toBe(false);
+    expect((await call("rdra_link", { links: [{ relation: "pr.scope", from: "pr.audit", to: "uc.browse" }] })).isError).toBe(false);
+    expect((await call("rdra_get_model", { kind: "principles" })).json().model.principles[0].scope).toEqual(["uc.browse"]);
   });
 
   it("returns errors for invalid edits and bad SQL", async () => {
@@ -95,9 +103,7 @@ describe("MCP tools", () => {
   });
 
   it("diffs against the base commit", async () => {
-    const repo = await makeRepo(rdraFiles());
-    run(repo, "git", ["checkout", "-q", "-b", "20260925-120000-demo"]);
-    run(repo, "git", ["config", "branch.20260925-120000-demo.geass-base-commit", run(repo, "git", ["rev-parse", "HEAD"]).trim()]);
+    const repo = await makeFeatureRepo(rdraFiles());
     const { call } = await connect(repo);
     await call("rdra_upsert", { items: [{ kind: "screens", element: { id: "scr.top", name: "トップ" } }] });
     const diff = (await call("rdra_diff")).json();
@@ -108,22 +114,56 @@ describe("MCP tools", () => {
     const outside = await connect(await makeRepo(rdraFiles()));
     expect((await outside.call("rdra_request_review")).isError).toBe(true);
 
-    const repo = await makeRepo({ ...rdraFiles(), [`${RDRA_DIR}/screens.yaml`]: "[]\n" });
-    const inside = await connect(repo, { SPECIFY_FEATURE_DIRECTORY: "specs/001-demo" });
+    const invalid = await connect(await makeInvalidFeatureRepo(rdraFiles()));
+    const refused = await invalid.call("rdra_request_review");
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("feature/<id>");
+    expect((await invalid.call("rdra_review_status")).json().note).toContain("feature/<id>");
+
+    const repo = await makeFeatureRepo({ ...rdraFiles(), [`${RDRA_DIR}/screens.yaml`]: "[]\n" });
+    const inside = await connect(repo);
     const res = await inside.call("rdra_request_review");
     expect(res.isError).toBe(true);
     expect(res.text).toContain("scr.cart");
   });
 
   it("requests a review and reports its status", async () => {
-    const repo = await makeRepo(rdraFiles());
+    const repo = await makeFeatureRepo(rdraFiles());
     let notified = 0;
-    const { call } = await connect(repo, { SPECIFY_FEATURE_DIRECTORY: "specs/001-demo" }, () => (notified += 1));
+    const { call } = await connect(repo, () => (notified += 1));
     const res = (await call("rdra_request_review")).json();
-    expect(res).toMatchObject({ status: "pending", url: "http://127.0.0.1:1234/" });
+    expect(res).toMatchObject({ status: "pending", url: "http://127.0.0.1:1234/", reviewFile: `${REVIEWS_DIR}/001-demo.json` });
     expect(notified).toBe(1);
-    const record = JSON.parse(await readFile(join(repo, "specs/001-demo", REVIEW_FILE), "utf8"));
+    const record = JSON.parse(await readFile(join(repo, REVIEWS_DIR, "001-demo.json"), "utf8"));
     expect(record.status).toBe("pending");
+    expect(record).not.toHaveProperty("base_commit");
     expect((await call("rdra_review_status")).json()).toMatchObject({ status: "pending", approval: "pending", lastRound: null });
+  });
+
+  it("refuses to validate the feature or request a review when no diff base resolves", async () => {
+    const repo = await makeRepo(rdraFiles());
+    run(repo, "git", ["checkout", "-q", "-b", "feature/001-demo"]);
+    const { call } = await connect(repo);
+    for (const tool of ["rdra_validate", "rdra_request_review"]) {
+      const res = await call(tool);
+      expect(res.isError).toBe(true);
+      expect(res.text).toContain("差分の基点が見つかりません");
+    }
+    await expect(readFile(join(repo, REVIEWS_DIR, "001-demo.json"), "utf8")).rejects.toThrow();
+  });
+
+  it("refuses a review while a changed usecase has no acceptance criteria", async () => {
+    const repo = await makeFeatureRepo(rdraFiles());
+    const { call } = await connect(repo);
+    await call("rdra_upsert", { items: [{ kind: "usecases", element: { id: "uc.place-order", name: "注文を確定する" } }] });
+    expect((await call("rdra_validate")).json().featureIssues.map((i: { code: string }) => i.code)).toEqual(["usecase-without-acceptance"]);
+    const refused = await call("rdra_request_review");
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("uc.place-order");
+
+    await call("rdra_upsert", {
+      items: [{ kind: "usecases", element: { id: "uc.place-order", acceptance: [{ id: "ac1", when: "注文する", then: "作られる" }] } }],
+    });
+    expect((await call("rdra_request_review")).isError).toBe(false);
   });
 });

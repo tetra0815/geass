@@ -48,6 +48,17 @@ describe("projectView", () => {
     expect(d.edges.find((e) => e.target === "scr.cart")?.status).toBe("removed");
   });
 
+  it("counts must principles on usecases in the usecase composite", () => {
+    const m = sampleModel();
+    m.principles.push(
+      { id: "pr.audit", name: "監査", category: "security", level: "must", scope: ["uc.place-order"] },
+      { id: "pr.fast", name: "速い", category: "quality", level: "should", scope: ["uc.place-order"] },
+    );
+    const d = projectView("usecase-composite", m);
+    expect(d.nodes.find((n) => n.id === "uc.place-order")?.principles).toBe(1);
+    expect(d.nodes.find((n) => n.id === "scr.cart")?.principles).toBeUndefined();
+  });
+
   it("maps ids to their home view", () => {
     expect(viewForId("act.a")).toBe("system-context");
     expect(viewForId("buc.a")).toBe("business-flow");

@@ -5,32 +5,25 @@ import { createConnection } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
+import { REVIEWS_DIR } from "../src/feature.js";
 import { startHttp, type RdraHttp } from "../src/http.js";
 import { RDRA_DIR } from "../src/model/io.js";
-import { REVIEW_FILE, emptyReview, requestReview, writeReview } from "../src/review.js";
+import { emptyReview, requestReview, writeReview } from "../src/review.js";
 import { RdraStore } from "../src/store.js";
 import { sampleFiles } from "./fixtures.js";
-import { makeRepo, run } from "./helpers.js";
+import { makeFeatureRepo, makeRepo } from "./helpers.js";
 
 const rdraFiles = () => Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
-const FEATURE = "specs/001-demo";
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
 async function setup(opts: { webRoot?: string | null; feature?: boolean } = {}) {
-  const repo = await makeRepo(rdraFiles());
+  const repo = opts.feature === false ? await makeRepo(rdraFiles()) : await makeFeatureRepo(rdraFiles());
   const store = await RdraStore.open(repo);
   const reviewEvents = new EventEmitter();
-  const env = opts.feature === false ? {} : { SPECIFY_FEATURE_DIRECTORY: FEATURE };
-  const http: RdraHttp = await startHttp({
-    store,
-    reviewEvents,
-    webRoot: opts.webRoot ?? null,
-    env,
-    now: () => "2026-09-25T10:00:00+09:00",
-  });
+  const http: RdraHttp = await startHttp({ store, reviewEvents, webRoot: opts.webRoot ?? null, now: () => "2026-09-25T10:00:00+09:00" });
   cleanups.push(() => store.close(), () => http.close());
   const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = { "x-rdra-client": "web" }) => {
     const res = await fetch(new URL(path, http.url), {
@@ -42,7 +35,7 @@ async function setup(opts: { webRoot?: string | null; feature?: boolean } = {}) 
     const isJson = res.headers.get("content-type")?.startsWith("application/json") ?? false;
     return { status: res.status, body: isJson ? JSON.parse(text) : null, text };
   };
-  return { repo, store, http, call, reviewEvents, featureDir: join(repo, FEATURE) };
+  return { repo, store, http, call, reviewEvents, reviewFile: join(repo, REVIEWS_DIR, "001-demo.json") };
 }
 
 describe("HTTP API", () => {
@@ -91,19 +84,17 @@ describe("HTTP API", () => {
   });
 
   it("returns the diff against the base commit", async () => {
-    const { call, store, repo } = await setup();
-    run(repo, "git", ["checkout", "-q", "-b", "20260925-120000-demo"]);
-    run(repo, "git", ["config", "branch.20260925-120000-demo.geass-base-commit", run(repo, "git", ["rev-parse", "HEAD"]).trim()]);
+    const { call, store } = await setup();
     await store.apply([{ op: "upsert", kind: "screens", element: { id: "scr.top", name: "トップ" } }]);
     const { body } = await call("GET", "/api/diff");
     expect(body.changes.map((c: { id: string }) => c.id)).toEqual(["scr.top"]);
   });
 
   it("records decisions only for pending reviews at the current version", async () => {
-    const { call, store, featureDir, reviewEvents } = await setup();
+    const { call, store, reviewFile, reviewEvents } = await setup();
     expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version })).status).toBe(422);
 
-    await writeReview(featureDir, requestReview(emptyReview(), { now: "t", baseCommit: null }));
+    await writeReview(reviewFile, requestReview(emptyReview(), { now: "t" }));
     expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: "sha256:old" })).status).toBe(409);
     expect((await call("POST", "/api/review/decision", { decision: "rejected", comments: [], version: store.version })).status).toBe(422);
 
@@ -118,19 +109,19 @@ describe("HTTP API", () => {
     expect(rejected.body.review.status).toBe("rejected");
     expect(notified).toBe(1);
 
-    await writeReview(featureDir, requestReview(rejected.body.review, { now: "t", baseCommit: null }));
+    await writeReview(reviewFile, requestReview(rejected.body.review, { now: "t" }));
     const approved = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version });
     expect(approved.status).toBe(200);
-    const record = JSON.parse(await readFile(join(featureDir, REVIEW_FILE), "utf8"));
+    const record = JSON.parse(await readFile(reviewFile, "utf8"));
     expect(record).toMatchObject({ status: "approved", approved_hash: store.version });
     expect(record.rounds).toHaveLength(2);
   });
 
   it("refuses approval while errors remain", async () => {
-    const { call, store, repo, featureDir } = await setup();
+    const { call, store, repo, reviewFile } = await setup();
     await writeFile(join(repo, RDRA_DIR, "screens.yaml"), "[]\n");
     await store.reload();
-    await writeReview(featureDir, requestReview(emptyReview(), { now: "t", baseCommit: null }));
+    await writeReview(reviewFile, requestReview(emptyReview(), { now: "t" }));
     const res = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version });
     expect(res.status).toBe(422);
     expect(res.body.message).toContain("エラー");

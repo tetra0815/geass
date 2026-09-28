@@ -12,6 +12,7 @@ export const RELATION_KINDS = [
   "evt.target",
   "inf.related",
   "st.information",
+  "pr.scope",
 ] as const;
 export type RelationKind = (typeof RELATION_KINDS)[number];
 
@@ -27,6 +28,7 @@ export const RELATION_FIELDS: Record<RelationKind, { field: string; shape: "ids"
   "evt.target": { field: "target", shape: "single" },
   "inf.related": { field: "related", shape: "refs" },
   "st.information": { field: "information", shape: "single" },
+  "pr.scope": { field: "scope", shape: "ids" },
 };
 
 export const RELATION_TARGET_PREFIXES: Record<RelationKind, readonly string[]> = {
@@ -41,6 +43,7 @@ export const RELATION_TARGET_PREFIXES: Record<RelationKind, readonly string[]> =
   "evt.target": ["act", "ext"],
   "inf.related": ["inf"],
   "st.information": ["inf"],
+  "pr.scope": ["act", "ext", "buc", "uc", "scr", "inf", "st"],
 };
 
 export interface Relation {

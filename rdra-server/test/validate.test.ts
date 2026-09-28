@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { diffModels } from "../src/diff.js";
 import { parseModel } from "../src/model/io.js";
 import { formatTransitionRef, parseTransitionRef, relationsOf } from "../src/model/relations.js";
-import { hasErrors, validate } from "../src/validate.js";
+import { hasErrors, validate, validateChanges } from "../src/validate.js";
+import { emptyModel } from "../src/model/kinds.js";
 import { sampleFiles, sampleModel } from "./fixtures.js";
 
 const codes = (files: Record<string, string>) => validate(parseModel(files)).map((i) => `${i.level}:${i.code}:${i.elementId ?? ""}`);
@@ -88,5 +90,82 @@ describe("validate", () => {
       "usecase-without-buc",
       "usecase-without-io",
     ]);
+  });
+
+  describe("principles", () => {
+    const withPrinciples = (yaml: string) => ({ ...sampleFiles(), "principles.yaml": yaml });
+
+    it("links principles to their scope and accepts a valid model", () => {
+      const files = withPrinciples(
+        "- id: pr.audit\n  name: 監査ログ\n  description: 全更新を記録する\n  category: security\n  level: must\n  scope: [uc.place-order, inf.order]\n",
+      );
+      expect(relationsOf(parseModel(files))).toContainEqual({ from: "pr.audit", to: "uc.place-order", kind: "pr.scope", attrs: {} });
+      expect(codes(files)).toEqual([]);
+    });
+
+    it("flags dangling and wrong-kind scope targets", () => {
+      const files = withPrinciples(
+        "- id: pr.a\n  name: A\n  description: d\n  category: security\n  level: must\n  scope: [uc.none, evt.payment-request]\n",
+      );
+      expect(codes(files)).toEqual(expect.arrayContaining(["error:dangling-ref:pr.a", "error:wrong-kind-ref:pr.a"]));
+    });
+
+    it("warns about must principles without a description", () => {
+      const files = withPrinciples(
+        "- id: pr.a\n  name: A\n  category: quality\n  level: must\n- id: pr.b\n  name: B\n  category: quality\n  level: should\n",
+      );
+      expect(codes(files)).toEqual(["warning:principle-without-description:pr.a"]);
+    });
+  });
+
+  describe("acceptance", () => {
+    const withAcceptance = (lines: string[]) => {
+      const files = sampleFiles();
+      files["usecases.yaml"] += ["  acceptance:", ...lines, ""].join("\n");
+      return files;
+    };
+
+    it("accepts well-formed criteria", () => {
+      expect(codes(withAcceptance(["    - { id: ac1, given: 在庫あり, when: 注文する, then: 注文が作られる }"]))).toEqual([]);
+    });
+
+    it("flags duplicate ids and blank when/then", () => {
+      expect(
+        codes(
+          withAcceptance([
+            "    - { id: ac1, when: 注文する, then: 作られる }",
+            "    - { id: ac1, when: 注文する, then: 作られる }",
+            '    - { id: ac2, when: 注文する, then: "   " }',
+            '    - { id: ac3, when: "", then: 作られる }',
+          ]),
+        ),
+      ).toEqual([
+        "error:duplicate-acceptance:uc.place-order",
+        "error:empty-acceptance:uc.place-order",
+        "error:empty-acceptance:uc.place-order",
+      ]);
+    });
+  });
+});
+
+describe("validateChanges", () => {
+  it("requires acceptance criteria only on added or modified usecases", () => {
+    const base = sampleModel();
+    const head = sampleModel();
+    head.usecases[0].name = "注文を確定する";
+    head.screens[0].name = "カート画面";
+    expect(validateChanges(diffModels(base, head)).map((i) => `${i.level}:${i.code}:${i.elementId}`)).toEqual([
+      "error:usecase-without-acceptance:uc.place-order",
+    ]);
+    head.usecases[0].acceptance.push({ id: "ac1", when: "注文する", then: "作られる" });
+    expect(validateChanges(diffModels(base, head))).toEqual([]);
+  });
+
+  it("ignores removed usecases and unchanged ones", () => {
+    const head = sampleModel();
+    head.usecases = [];
+    expect(validateChanges(diffModels(sampleModel(), head))).toEqual([]);
+    expect(validateChanges(diffModels(sampleModel(), sampleModel()))).toEqual([]);
+    expect(validateChanges(diffModels(emptyModel(), emptyModel()))).toEqual([]);
   });
 });

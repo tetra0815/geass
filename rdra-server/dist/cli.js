@@ -4543,7 +4543,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve) {
+function isRecursive(inst, stack, resolve3) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -4553,7 +4553,7 @@ function isRecursive(inst, stack, resolve) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve);
+      const answer = isRecursive(child, stack, resolve3);
       if (answer > result)
         result = answer;
     }
@@ -4564,7 +4564,7 @@ function isRecursive(inst, stack, resolve) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve3) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -4628,7 +4628,7 @@ function isRecursive(inst, stack, resolve) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve3 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -16104,8 +16104,8 @@ var init_to_json_schema = __esm({
 function aggregateChecks(schema) {
   const agg = {};
   const def = schema._zod.def;
-  const list = schema._zod.traits.has("$ZodCheck") ? [schema, ...def.checks ?? []] : def.checks ?? [];
-  for (const ch of list)
+  const list2 = schema._zod.traits.has("$ZodCheck") ? [schema, ...def.checks ?? []] : def.checks ?? [];
+  for (const ch of list2)
     contributors[ch._zod.def.check]?.(agg, ch._zod.def);
   const bag = schema._zod.bag;
   if (bag.minimum !== void 0)
@@ -20413,6 +20413,9 @@ function idSchema(prefix) {
 function common(prefix) {
   return { id: idSchema(prefix), name: external_exports.string().min(1), description: external_exports.string().optional() };
 }
+function acceptanceRef(usecaseId, acId) {
+  return `${usecaseId}#${acId}`;
+}
 function kindDef(key) {
   const def = KINDS.find((k) => k.key === key);
   if (!def) throw new Error(`unknown kind: ${key}`);
@@ -20423,16 +20426,16 @@ function kindOfId(id) {
   return KINDS.find((k) => k.prefix === prefix);
 }
 function emptyModel() {
-  return { actors: [], externalSystems: [], bucs: [], usecases: [], screens: [], events: [], information: [], states: [] };
+  return { actors: [], externalSystems: [], bucs: [], usecases: [], screens: [], events: [], information: [], states: [], principles: [] };
 }
 function findElement(model, id) {
   const kind = kindOfId(id);
   if (!kind) return void 0;
-  const list = model[kind.key];
-  const index = list.findIndex((e) => e.id === id);
-  return index >= 0 ? { kind, element: list[index], index } : void 0;
+  const list2 = model[kind.key];
+  const index = list2.findIndex((e) => e.id === id);
+  return index >= 0 ? { kind, element: list2[index], index } : void 0;
 }
-var SLUG, slugPattern, idList, AccessSchema, ActorSchema, ExternalSystemSchema, ScreenSchema, BucSchema, UsecaseSchema, EventSchema, InformationSchema, StateModelSchema, KINDS;
+var SLUG, slugPattern, idList, AccessSchema, AcceptanceSchema, ActorSchema, ExternalSystemSchema, ScreenSchema, BucSchema, UsecaseSchema, EventSchema, InformationSchema, StateModelSchema, PRINCIPLE_CATEGORIES, PrincipleCategorySchema, PrincipleLevelSchema, PrincipleSchema, KINDS;
 var init_kinds = __esm({
   "src/model/kinds.ts"() {
     "use strict";
@@ -20441,6 +20444,12 @@ var init_kinds = __esm({
     slugPattern = new RegExp(`^${SLUG}$`);
     idList = () => external_exports.array(external_exports.string()).default(() => []);
     AccessSchema = external_exports.enum(["create", "read", "update", "delete"]);
+    AcceptanceSchema = external_exports.strictObject({
+      id: external_exports.string().regex(slugPattern, "\u53D7\u3051\u5165\u308C\u6761\u4EF6\u306E id \u306F\u30B9\u30E9\u30C3\u30B0\uFF08\u82F1\u5C0F\u6587\u5B57\u30FB\u6570\u5B57\u30FB\u30CF\u30A4\u30D5\u30F3\uFF09\u306B\u3057\u3066\u304F\u3060\u3055\u3044"),
+      given: external_exports.string().optional(),
+      when: external_exports.string(),
+      then: external_exports.string()
+    });
     ActorSchema = external_exports.strictObject({ ...common("act") });
     ExternalSystemSchema = external_exports.strictObject({ ...common("ext") });
     ScreenSchema = external_exports.strictObject({ ...common("scr") });
@@ -20456,7 +20465,8 @@ var init_kinds = __esm({
       screens: idList(),
       events: idList(),
       information: external_exports.array(external_exports.strictObject({ ref: external_exports.string(), access: AccessSchema })).default(() => []),
-      transitions: idList()
+      transitions: idList(),
+      acceptance: external_exports.array(AcceptanceSchema).default(() => [])
     });
     EventSchema = external_exports.strictObject({
       ...common("evt"),
@@ -20474,6 +20484,15 @@ var init_kinds = __esm({
       states: external_exports.array(external_exports.strictObject({ id: external_exports.string().regex(slugPattern, "\u72B6\u614B\u306E id \u306F\u30B9\u30E9\u30C3\u30B0\uFF08\u82F1\u5C0F\u6587\u5B57\u30FB\u6570\u5B57\u30FB\u30CF\u30A4\u30D5\u30F3\uFF09\u306B\u3057\u3066\u304F\u3060\u3055\u3044"), name: external_exports.string().min(1) })).default(() => []),
       transitions: external_exports.array(external_exports.strictObject({ from: external_exports.string(), to: external_exports.string() })).default(() => [])
     });
+    PRINCIPLE_CATEGORIES = ["business", "quality", "security", "engineering", "technology"];
+    PrincipleCategorySchema = external_exports.enum(PRINCIPLE_CATEGORIES);
+    PrincipleLevelSchema = external_exports.enum(["must", "should"]);
+    PrincipleSchema = external_exports.strictObject({
+      ...common("pr"),
+      category: PrincipleCategorySchema,
+      level: PrincipleLevelSchema,
+      scope: idList()
+    });
     KINDS = [
       { key: "actors", prefix: "act", file: "actors.yaml", table: "actors", label: "\u30A2\u30AF\u30BF\u30FC", schema: ActorSchema },
       { key: "externalSystems", prefix: "ext", file: "external-systems.yaml", table: "external_systems", label: "\u5916\u90E8\u30B7\u30B9\u30C6\u30E0", schema: ExternalSystemSchema },
@@ -20482,7 +20501,8 @@ var init_kinds = __esm({
       { key: "screens", prefix: "scr", file: "screens.yaml", table: "screens", label: "\u753B\u9762", schema: ScreenSchema },
       { key: "events", prefix: "evt", file: "events.yaml", table: "events", label: "\u30A4\u30D9\u30F3\u30C8", schema: EventSchema },
       { key: "information", prefix: "inf", file: "information.yaml", table: "information", label: "\u60C5\u5831", schema: InformationSchema },
-      { key: "states", prefix: "st", file: "states.yaml", table: "state_models", label: "\u72B6\u614B\u30E2\u30C7\u30EB", schema: StateModelSchema }
+      { key: "states", prefix: "st", file: "states.yaml", table: "state_models", label: "\u72B6\u614B\u30E2\u30C7\u30EB", schema: StateModelSchema },
+      { key: "principles", prefix: "pr", file: "principles.yaml", table: "principles", label: "\u539F\u5247", schema: PrincipleSchema }
     ];
   }
 });
@@ -20522,6 +20542,24 @@ var init_hash = __esm({
 });
 
 // src/diff.ts
+function acceptanceChanges(before, after) {
+  const prev = new Map((before?.acceptance ?? []).map((a) => [a.id, a]));
+  const next = new Map((after?.acceptance ?? []).map((a) => [a.id, a]));
+  const out = [];
+  for (const id of [.../* @__PURE__ */ new Set([...prev.keys(), ...next.keys()])].sort()) {
+    const a = prev.get(id);
+    const b = next.get(id);
+    if (!a) out.push({ id, type: "added" });
+    else if (!b) out.push({ id, type: "removed" });
+    else if (JSON.stringify(canonicalize(a)) !== JSON.stringify(canonicalize(b))) out.push({ id, type: "modified" });
+  }
+  return out;
+}
+function withAcceptance(change) {
+  if (change.kind !== "usecases") return change;
+  const acceptance = acceptanceChanges(change.before, change.after);
+  return acceptance.length > 0 ? { ...change, acceptance } : change;
+}
 function diffModels(base, head) {
   const changes = [];
   for (const kind of KINDS) {
@@ -20530,16 +20568,16 @@ function diffModels(base, head) {
     for (const [id, next] of after) {
       const prev = before.get(id);
       if (!prev) {
-        changes.push({ id, kind: kind.key, type: "added", fields: [], after: next });
+        changes.push(withAcceptance({ id, kind: kind.key, type: "added", fields: [], after: next }));
         continue;
       }
       const a = canonicalize(prev);
       const b = canonicalize(next);
       const fields = [.../* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)])].filter((f) => JSON.stringify(a[f]) !== JSON.stringify(b[f])).sort();
-      if (fields.length > 0) changes.push({ id, kind: kind.key, type: "modified", fields, before: prev, after: next });
+      if (fields.length > 0) changes.push(withAcceptance({ id, kind: kind.key, type: "modified", fields, before: prev, after: next }));
     }
     for (const [id, prev] of before) {
-      if (!after.has(id)) changes.push({ id, kind: kind.key, type: "removed", fields: [], before: prev });
+      if (!after.has(id)) changes.push(withAcceptance({ id, kind: kind.key, type: "removed", fields: [], before: prev }));
     }
   }
   return changes;
@@ -24515,10 +24553,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep2, value } = collItem;
+        const { start, key, sep: sep3, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep2?.[0],
+          next: key ?? sep3?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -24532,7 +24570,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep2) {
+          if (!keyProps.anchor && !keyProps.tag && !sep3) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map2.comment)
@@ -24556,7 +24594,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep2 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep3 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -24572,7 +24610,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep2, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep3, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -24663,7 +24701,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep2 = "";
+        let sep3 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -24677,13 +24715,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep2 + cb;
-              sep2 = "";
+                comment += sep3 + cb;
+              sep3 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep2 += source;
+                sep3 += source;
               hasSpace = true;
               break;
             default:
@@ -24726,18 +24764,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep: sep2, value } = collItem;
+        const { start, key, sep: sep3, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep2?.[0],
+          next: key ?? sep3?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep2 && !value) {
+          if (!props.anchor && !props.tag && !sep3 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -24791,8 +24829,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep2 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep2, null, props, onError);
+        if (!isMap && !sep3 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep3, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -24804,7 +24842,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep2 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep3 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -24815,8 +24853,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep2)
-                for (const st of sep2) {
+              if (sep3)
+                for (const st of sep3) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -24833,7 +24871,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep2, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep3, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -25013,7 +25051,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep2 = "";
+      let sep3 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines[i][0].slice(trimIndent) + "\n";
@@ -25030,24 +25068,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep2 + indent.slice(trimIndent) + content;
-          sep2 = "\n";
+          value += sep3 + indent.slice(trimIndent) + content;
+          sep3 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep2 === " ")
-            sep2 = "\n";
-          else if (!prevMoreIndented && sep2 === "\n")
-            sep2 = "\n\n";
-          value += sep2 + indent.slice(trimIndent) + content;
-          sep2 = "\n";
+          if (sep3 === " ")
+            sep3 = "\n";
+          else if (!prevMoreIndented && sep3 === "\n")
+            sep3 = "\n\n";
+          value += sep3 + indent.slice(trimIndent) + content;
+          sep3 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep2 === "\n")
+          if (sep3 === "\n")
             value += "\n";
           else
-            sep2 = "\n";
+            sep3 = "\n";
         } else {
-          value += sep2 + content;
-          sep2 = " ";
+          value += sep3 + content;
+          sep3 = " ";
           prevMoreIndented = false;
         }
       }
@@ -25230,25 +25268,25 @@ var require_resolve_flow_scalar = __commonJS({
         trimBoth = /^[ \t]+|[ \t]+$/g;
       }
       let res = match[1].replace(trimEnd, "");
-      let sep2 = " ";
+      let sep3 = " ";
       let pos = line.lastIndex;
       while (match = line.exec(source)) {
         const lm = match[1].replace(trimBoth, "");
         if (lm === "") {
-          if (sep2 === "\n")
-            res += sep2;
+          if (sep3 === "\n")
+            res += sep3;
           else
-            sep2 = "\n";
+            sep3 = "\n";
         } else {
-          res += sep2 + lm;
-          sep2 = " ";
+          res += sep3 + lm;
+          sep3 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep2 + (match?.[1] ?? "");
+      return res + sep3 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -26058,14 +26096,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep2, value }) {
+    function stringifyItem({ start, key, sep: sep3, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep2)
-        for (const st of sep2)
+      if (sep3)
+        for (const st of sep3)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -26866,15 +26904,15 @@ var require_parser = __commonJS({
     var node_process = __require("process");
     var cst = require_cst();
     var lexer = require_lexer();
-    function includesToken(list, type) {
-      for (let i = 0; i < list.length; ++i)
-        if (list[i].type === type)
+    function includesToken(list2, type) {
+      for (let i = 0; i < list2.length; ++i)
+        if (list2[i].type === type)
           return true;
       return false;
     }
-    function findNonEmptyIndex(list) {
-      for (let i = 0; i < list.length; ++i) {
-        switch (list[i].type) {
+    function findNonEmptyIndex(list2) {
+      for (let i = 0; i < list2.length; ++i) {
+        switch (list2[i].type) {
           case "space":
           case "comment":
           case "newline":
@@ -27232,18 +27270,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep2;
+          let sep3;
           if (scalar.end) {
-            sep2 = scalar.end;
-            sep2.push(this.sourceToken);
+            sep3 = scalar.end;
+            sep3.push(this.sourceToken);
             delete scalar.end;
           } else
-            sep2 = [this.sourceToken];
+            sep3 = [this.sourceToken];
           const map2 = {
             type: "block-map",
             offset: scalar.offset,
             indent: scalar.indent,
-            items: [{ start, key: scalar, sep: sep2 }]
+            items: [{ start, key: scalar, sep: sep3 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map2;
@@ -27396,15 +27434,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep2 = it.sep;
-                  sep2.push(this.sourceToken);
+                  const sep3 = it.sep;
+                  sep3.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep2 }]
+                    items: [{ start: start2, key, sep: sep3 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -27598,13 +27636,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep2 = fc.end.splice(1, fc.end.length);
-            sep2.push(this.sourceToken);
+            const sep3 = fc.end.splice(1, fc.end.length);
+            sep3.push(this.sourceToken);
             const map2 = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep2 }]
+              items: [{ start, key: fc, sep: sep3 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map2;
@@ -27996,31 +28034,22 @@ async function currentBranch(repoRoot) {
   const r = await git(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
   return r.ok && r.stdout.trim() ? r.stdout.trim() : null;
 }
-async function rootWorktreeBranch(repoRoot) {
-  const r = await git(repoRoot, ["worktree", "list", "--porcelain"]);
-  if (!r.ok) return null;
-  for (const line of r.stdout.split("\n")) {
-    if (line.startsWith("branch refs/heads/")) return line.slice("branch refs/heads/".length);
-    if (line === "detached" || line === "") return null;
-  }
-  return null;
+async function gitConfig(repoRoot, key) {
+  const r = await git(repoRoot, ["config", "--get", key]);
+  const value = r.stdout.trim();
+  return r.ok && value ? value : null;
 }
-function baseCommitConfigKey(branch) {
-  return `branch.${branch}.geass-base-commit`;
+async function verifiedCommit(repoRoot, ref) {
+  return (await git(repoRoot, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).ok;
 }
 async function resolveBaseCommit(repoRoot) {
   const branch = await currentBranch(repoRoot);
-  if (branch) {
-    const configured = await git(repoRoot, ["config", "--get", baseCommitConfigKey(branch)]);
-    const value = configured.stdout.trim();
-    if (configured.ok && value) {
-      const verified = await git(repoRoot, ["rev-parse", "--verify", "--quiet", `${value}^{commit}`]);
-      if (verified.ok) return verified.stdout.trim();
-    }
-  }
-  const root = await rootWorktreeBranch(repoRoot);
-  if (root && root !== branch) {
-    const mb = await git(repoRoot, ["merge-base", "HEAD", root]);
+  if (!branch) return null;
+  const base = await gitConfig(repoRoot, `gitflow.branch.${branch}.base`) ?? await gitConfig(repoRoot, "gitflow.branch.develop") ?? "develop";
+  if (base === branch) return null;
+  for (const ref of [`refs/remotes/origin/${base}`, `refs/heads/${base}`]) {
+    if (!await verifiedCommit(repoRoot, ref)) continue;
+    const mb = await git(repoRoot, ["merge-base", "HEAD", ref]);
     if (mb.ok && mb.stdout.trim()) return mb.stdout.trim();
   }
   return null;
@@ -28047,30 +28076,57 @@ var init_git = __esm({
   }
 });
 
+// src/feature.ts
+import { join as join2 } from "node:path";
+function invalidReason(branch, prefix, id) {
+  const suggestion = id.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "") || "001-name";
+  return `\u30D6\u30E9\u30F3\u30C1 ${branch} \u306F feature \u30D6\u30E9\u30F3\u30C1\uFF08${prefix}*\uFF09\u3067\u3059\u304C\u3001\u300C${id}\u300D\u306F feature ID \u306B\u4F7F\u3048\u307E\u305B\u3093\u3002feature ID \u306F\u82F1\u6570\u5B57\u3067\u59CB\u307E\u308A\u3001\u82F1\u6570\u5B57\u3068 . _ - \u3060\u3051\u304B\u3089\u306A\u308A\u3001/ \u3092\u542B\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u30D6\u30E9\u30F3\u30C1\u540D\u3092 ${prefix}<id> \u306E\u5F62\u306B\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4F8B: git branch -m ${prefix}${suggestion}\uFF09`;
+}
+async function resolveFeature(repoRoot) {
+  const branch = await currentBranch(repoRoot);
+  if (!branch) return null;
+  const prefix = await gitConfig(repoRoot, "gitflow.prefix.feature") ?? "feature/";
+  if (!branch.startsWith(prefix)) return null;
+  const id = branch.slice(prefix.length);
+  if (!FEATURE_ID.test(id)) return { invalid: true, branch, reason: invalidReason(branch, prefix, id) };
+  return { id, branch, reviewFile: join2(repoRoot, REVIEWS_DIR, `${id}.json`) };
+}
+var REVIEWS_DIR, FEATURE_ID, isInvalidFeature;
+var init_feature = __esm({
+  "src/feature.ts"() {
+    "use strict";
+    init_git();
+    REVIEWS_DIR = "docs/rdra/reviews";
+    FEATURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+    isInvalidFeature = (f) => f !== null && "invalid" in f;
+  }
+});
+
 // src/review.ts
 import { randomBytes } from "node:crypto";
 import { mkdir as mkdir2, readFile as readFile2, rename, rm, writeFile as writeFile2 } from "node:fs/promises";
-import { join as join2 } from "node:path";
+import { dirname } from "node:path";
 function emptyReview() {
-  return { status: "none", base_commit: null, approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
+  return { status: "none", approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
 }
-async function readReview(featureDir) {
+async function readReview(file2) {
   let text;
   try {
-    text = await readFile2(join2(featureDir, REVIEW_FILE), "utf8");
+    text = await readFile2(file2, "utf8");
   } catch (e) {
     if (e.code === "ENOENT") return emptyReview();
     throw e;
   }
-  return { ...emptyReview(), ...JSON.parse(text) };
+  const data = JSON.parse(text);
+  delete data.base_commit;
+  return { ...emptyReview(), ...data };
 }
-async function writeReview(featureDir, record2) {
-  await mkdir2(featureDir, { recursive: true });
-  const target = join2(featureDir, REVIEW_FILE);
-  const tmp = `${target}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
+async function writeReview(file2, record2) {
+  await mkdir2(dirname(file2), { recursive: true });
+  const tmp = `${file2}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
   try {
     await writeFile2(tmp, JSON.stringify(record2, null, 2) + "\n", "utf8");
-    await rename(tmp, target);
+    await rename(tmp, file2);
   } catch (e) {
     await rm(tmp, { force: true });
     throw e;
@@ -28093,17 +28149,342 @@ function approvalState(record2, currentHash) {
   if (record2.approved_hash === currentHash) return { state: "approved" };
   return { state: "stale", approvedHash: record2.approved_hash ?? "", currentHash };
 }
-var REVIEW_FILE, ReviewError;
+var ReviewError;
 var init_review = __esm({
   "src/review.ts"() {
     "use strict";
-    REVIEW_FILE = "rdra-review.json";
     ReviewError = class extends Error {
       constructor(message) {
         super(message);
         this.name = "ReviewError";
       }
     };
+  }
+});
+
+// src/approval.ts
+import { relative } from "node:path";
+async function changedSinceApproval(repo, reviewFile, current) {
+  const commit = await lastCommitTouching(repo, relative(repo, reviewFile));
+  if (!commit) return void 0;
+  try {
+    return diffModels(parseModel(await readModelFilesAt(repo, commit)), current).map((c) => `${c.type} ${c.id}`);
+  } catch {
+    return void 0;
+  }
+}
+async function checkFeatureApproval(repo) {
+  const feature = await resolveFeature(repo);
+  if (!feature) return { state: "outside", message: APPROVAL_MESSAGES.outside };
+  if (isInvalidFeature(feature)) return { state: "error", message: feature.reason };
+  let model;
+  try {
+    model = parseModel(await readModelFiles(repo));
+  } catch (e) {
+    if (!(e instanceof ModelParseError)) throw e;
+    return { state: "error", message: `RDRA \u306E YAML \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`, featureId: feature.id };
+  }
+  let review;
+  try {
+    review = await readReview(feature.reviewFile);
+  } catch (e) {
+    return { state: "error", message: `\u627F\u8A8D\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`, featureId: feature.id };
+  }
+  const state = approvalState(review, modelHash(model));
+  const result = { state: state.state, message: APPROVAL_MESSAGES[state.state], model, featureId: feature.id };
+  if (state.state === "stale") {
+    const changed = await changedSinceApproval(repo, feature.reviewFile, model);
+    if (changed) result.changed = changed;
+  }
+  return result;
+}
+var APPROVAL_MESSAGES;
+var init_approval = __esm({
+  "src/approval.ts"() {
+    "use strict";
+    init_diff();
+    init_feature();
+    init_git();
+    init_hash();
+    init_io();
+    init_review();
+    APPROVAL_MESSAGES = {
+      none: "RDRA \u306E\u30EC\u30D3\u30E5\u30FC\u304C\u307E\u3060\u4F9D\u983C\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002/rdra \u3067\u30E2\u30C7\u30EB\u3092\u4F5C\u6210\u3057\u3001\u30EC\u30D3\u30E5\u30FC\u3092\u5B8C\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+      pending: "RDRA \u306E\u30EC\u30D3\u30E5\u30FC\u304C\u627F\u8A8D\u5F85\u3061\u3067\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u627F\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+      rejected: "RDRA \u304C\u5DEE\u3057\u623B\u3055\u308C\u3066\u3044\u307E\u3059\u3002/rdra \u3067\u30B3\u30E1\u30F3\u30C8\u306B\u5BFE\u5FDC\u3057\u3001\u518D\u5EA6\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+      stale: "\u627F\u8A8D\u5F8C\u306B RDRA \u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002/rdra \u3067\u518D\u30EC\u30D3\u30E5\u30FC\u3092\u53D7\u3051\u3066\u304F\u3060\u3055\u3044\u3002",
+      approved: "RDRA \u306F\u627F\u8A8D\u6E08\u307F\u3067\u3059\u3002",
+      outside: "feature \u30D6\u30E9\u30F3\u30C1\uFF08feature/*\uFF09\u306E\u5916\u3067\u3059\u3002"
+    };
+  }
+});
+
+// src/trace-state.ts
+import { createHash as createHash2, randomBytes as randomBytes2 } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir as mkdir3, readFile as readFile3, rename as rename2, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
+import { dirname as dirname2, join as join3 } from "node:path";
+async function featurePlans(repoRoot, base) {
+  const r = await git(repoRoot, ["diff", "-z", "--name-only", "--diff-filter=AMR", `${base}..HEAD`, "--", PLANS_DIR]);
+  if (!r.ok) return [];
+  return r.stdout.split("\0").filter((p) => p.endsWith(".md") && existsSync(join3(repoRoot, p))).sort();
+}
+function normalizePlan(text) {
+  return text.replace(/^(\s*(?:[-*+]|\d{1,9}[.)])\s+)\[[xX]\]/gm, "$1[ ]");
+}
+async function planHashes(repoRoot, paths) {
+  const out = {};
+  for (const p of paths) {
+    const text = await readFile3(join3(repoRoot, p), "utf8");
+    out[p] = "sha256:" + createHash2("sha256").update(normalizePlan(text)).digest("hex");
+  }
+  return out;
+}
+function samePlans(a, b) {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => b[k] === a[k]);
+}
+function markerPath(repoRoot, featureId) {
+  return join3(repoRoot, ".geass", "state", `trace-${featureId}.json`);
+}
+async function writeMarker(repoRoot, featureId, marker) {
+  const file2 = markerPath(repoRoot, featureId);
+  await mkdir3(dirname2(file2), { recursive: true });
+  const ignore = join3(dirname2(file2), ".gitignore");
+  if (!existsSync(ignore)) await writeFile3(ignore, "*\n", "utf8");
+  const tmp = `${file2}.tmp-${process.pid}-${randomBytes2(6).toString("hex")}`;
+  try {
+    await writeFile3(tmp, JSON.stringify(marker, null, 2) + "\n", "utf8");
+    await rename2(tmp, file2);
+  } catch (e) {
+    await rm2(tmp, { force: true });
+    throw e;
+  }
+}
+async function readMarker(repoRoot, featureId) {
+  try {
+    const data = JSON.parse(await readFile3(markerPath(repoRoot, featureId), "utf8"));
+    if (typeof data.rdra_hash !== "string" || !data.plans || typeof data.plans !== "object") return null;
+    return { rdra_hash: data.rdra_hash, plans: data.plans, traced_at: String(data.traced_at ?? "") };
+  } catch {
+    return null;
+  }
+}
+async function removeMarker(repoRoot, featureId) {
+  await rm2(markerPath(repoRoot, featureId), { force: true });
+}
+var PLANS_DIR;
+var init_trace_state = __esm({
+  "src/trace-state.ts"() {
+    "use strict";
+    init_git();
+    PLANS_DIR = "docs/superpowers/plans";
+  }
+});
+
+// src/gate.ts
+import { resolve, sep } from "node:path";
+async function gateSkill(repoRoot, skill) {
+  const name = skill.split(":").at(-1) ?? skill;
+  if (!GATED_SKILLS.has(name)) return allow;
+  const approval = await checkFeatureApproval(repoRoot);
+  if (approval.state === "outside") return allow;
+  if (approval.state !== "approved") {
+    const changed = approval.changed?.length ? ` \u5909\u66F4\u3055\u308C\u305F\u8981\u7D20: ${approval.changed.join(", ")}` : "";
+    return deny(approval.message + changed);
+  }
+  if (!EXECUTION_SKILLS.has(name)) return allow;
+  const marker = await readMarker(repoRoot, approval.featureId);
+  if (!marker) return deny("/trace \u304C\u307E\u3060\u901A\u3063\u3066\u3044\u307E\u305B\u3093\u3002\u8A08\u753B\u3092 commit \u3057\u3001/trace \u3067 RDRA \u306E\u5DEE\u5206\u3092\u3059\u3079\u3066\u30AB\u30D0\u30FC\u3057\u3066\u3044\u308B\u3053\u3068\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+  if (marker.rdra_hash !== modelHash(approval.model)) return deny("/trace \u306E\u5F8C\u306B RDRA \u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002/trace \u3092\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+  const base = await resolveBaseCommit(repoRoot);
+  const plans = base ? await featurePlans(repoRoot, base) : [];
+  if (!samePlans(marker.plans, await planHashes(repoRoot, plans))) {
+    return deny("/trace \u306E\u5F8C\u306B\u8A08\u753B\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002\u8A08\u753B\u3092 commit \u3057\u3001/trace \u3092\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+  }
+  return allow;
+}
+function gatePath(file2) {
+  const normalized = resolve(file2).split(sep).join("/");
+  if (normalized.includes("/docs/rdra/reviews/")) {
+    return deny("\u627F\u8A8D\u8A18\u9332\uFF08docs/rdra/reviews/\uFF09\u306F\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u304B\u3089\u306E\u307F\u66F4\u65B0\u3067\u304D\u307E\u3059\u3002\u627F\u8A8D\u30FB\u5DEE\u3057\u623B\u3057\u306F\u4EBA\u9593\u304C\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u884C\u3063\u3066\u304F\u3060\u3055\u3044\u3002");
+  }
+  return allow;
+}
+var PLAN_SKILLS, EXECUTION_SKILLS, GATED_SKILLS, allow, deny;
+var init_gate = __esm({
+  "src/gate.ts"() {
+    "use strict";
+    init_approval();
+    init_git();
+    init_hash();
+    init_trace_state();
+    PLAN_SKILLS = /* @__PURE__ */ new Set(["writing-plans"]);
+    EXECUTION_SKILLS = /* @__PURE__ */ new Set(["executing-plans", "subagent-driven-development"]);
+    GATED_SKILLS = /* @__PURE__ */ new Set([...PLAN_SKILLS, ...EXECUTION_SKILLS]);
+    allow = { decision: "allow" };
+    deny = (reason) => ({ decision: "deny", reason });
+  }
+});
+
+// src/base-diff.ts
+async function diffAgainstBase(repoRoot, model) {
+  const base = await resolveBaseCommit(repoRoot);
+  if (!base) return { base: null, changes: [] };
+  const baseModel = parseModel(await readModelFilesAt(repoRoot, base));
+  return { base, changes: diffModels(baseModel, model) };
+}
+var NO_BASE_MESSAGE;
+var init_base_diff = __esm({
+  "src/base-diff.ts"() {
+    "use strict";
+    init_diff();
+    init_git();
+    init_io();
+    NO_BASE_MESSAGE = "\u5DEE\u5206\u306E\u57FA\u70B9\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002develop \u30D6\u30E9\u30F3\u30C1\uFF08\u307E\u305F\u306F git config gitflow.branch.<branch>.base\uFF09\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044";
+  }
+});
+
+// src/trace.ts
+function liveChanges(changes, kind) {
+  return new Set(changes.filter((c) => c.kind === kind && c.type !== "removed").map((c) => c.id));
+}
+function traceTargets(model, changes) {
+  const usecases = liveChanges(changes, "usecases");
+  const principles = liveChanges(changes, "principles");
+  const required2 = /* @__PURE__ */ new Set();
+  const applicable = /* @__PURE__ */ new Set();
+  for (const uc of model.usecases) {
+    if (!usecases.has(uc.id)) continue;
+    for (const ac of uc.acceptance) required2.add(acceptanceRef(uc.id, ac.id));
+  }
+  for (const p of model.principles) {
+    if (p.level !== "must") continue;
+    if (p.scope.length === 0 && NOT_TRACED.includes(p.category)) {
+      applicable.add(p.id);
+      continue;
+    }
+    if (principles.has(p.id) || p.scope.some((id) => usecases.has(id))) required2.add(p.id);
+  }
+  return { required: [...required2].sort(), applicable: [...applicable].sort() };
+}
+function knownRefs(model) {
+  const known = /* @__PURE__ */ new Set();
+  for (const kind of KINDS) for (const e of model[kind.key]) known.add(e.id);
+  for (const uc of model.usecases) for (const ac of uc.acceptance) known.add(acceptanceRef(uc.id, ac.id));
+  return known;
+}
+function parseCovers(markdown) {
+  const refs = [];
+  let fence = null;
+  for (const line of markdown.split(/\r?\n/)) {
+    const f = FENCE.exec(line);
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = null;
+      continue;
+    }
+    if (f && !(f[1][0] === "`" && f[2].includes("`"))) {
+      fence = f[1];
+      continue;
+    }
+    const m = COVERS_LINE.exec(line);
+    if (!m) continue;
+    for (const token of m[1].split(/[\s,、]+/)) {
+      const ref = token.replace(/^[`*]+/, "").replace(/[`*.;]+$/, "");
+      if (ref && !refs.includes(ref)) refs.push(ref);
+    }
+  }
+  return refs;
+}
+function matchTrace(targets, covers, known) {
+  const required2 = new Set(targets.required);
+  const given = new Set(covers);
+  const covered = targets.required.filter((r) => given.has(r));
+  const uncovered = targets.required.filter((r) => !given.has(r));
+  const unknown2 = covers.filter((r) => !known.has(r) && !required2.has(r)).sort();
+  const outOfScope = covers.filter((r) => known.has(r) && !required2.has(r)).sort();
+  return {
+    ok: uncovered.length === 0 && unknown2.length === 0,
+    required: targets.required,
+    applicable: targets.applicable,
+    covered,
+    uncovered,
+    unknown: unknown2,
+    outOfScope
+  };
+}
+var NOT_TRACED, COVERS_LINE, FENCE;
+var init_trace = __esm({
+  "src/trace.ts"() {
+    "use strict";
+    init_kinds();
+    NOT_TRACED = ["engineering", "technology"];
+    COVERS_LINE = /^\s*(?:[-*]\s+)?(?:\*\*)?Covers(?:\*\*)?:(?:\*\*)?\s*(.*)$/;
+    FENCE = /^\s*(`{3,}|~{3,})(.*)$/;
+  }
+});
+
+// src/trace-run.ts
+import { readFile as readFile4 } from "node:fs/promises";
+import { join as join4 } from "node:path";
+async function runTrace(repoRoot, now) {
+  const feature = await resolveFeature(repoRoot);
+  if (!feature) return { status: "error", message: "feature \u30D6\u30E9\u30F3\u30C1\uFF08feature/*\uFF09\u306E\u5916\u3067\u306F trace \u3067\u304D\u307E\u305B\u3093" };
+  if (isInvalidFeature(feature)) return { status: "error", message: feature.reason };
+  let model;
+  let diff;
+  try {
+    model = parseModel(await readModelFiles(repoRoot));
+    diff = await diffAgainstBase(repoRoot, model);
+  } catch (e) {
+    if (e instanceof ModelParseError) return { status: "error", message: `RDRA \u306E YAML \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}` };
+    throw e;
+  }
+  if (!diff.base) return { status: "error", message: NO_BASE_MESSAGE };
+  const plans = await featurePlans(repoRoot, diff.base);
+  if (plans.length === 0) {
+    return {
+      status: "error",
+      message: `\u3053\u306E feature \u3067 commit \u3055\u308C\u305F\u8A08\u753B\uFF08${PLANS_DIR}/*.md\uFF09\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u8A08\u753B\u3092 commit \u3057\u3066\u304B\u3089\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044`
+    };
+  }
+  const covers = [];
+  for (const p of plans) {
+    for (const ref of parseCovers(await readFile4(join4(repoRoot, p), "utf8"))) if (!covers.includes(ref)) covers.push(ref);
+  }
+  const report = matchTrace(traceTargets(model, diff.changes), covers, knownRefs(model));
+  if (report.ok) {
+    await writeMarker(repoRoot, feature.id, { rdra_hash: modelHash(model), plans: await planHashes(repoRoot, plans), traced_at: now });
+  } else {
+    await removeMarker(repoRoot, feature.id);
+  }
+  return { status: report.ok ? "ok" : "failed", feature: feature.id, plans, report };
+}
+function formatTrace(outcome) {
+  if (outcome.status === "error") return `trace: \u5B9F\u884C\u3067\u304D\u307E\u305B\u3093: ${outcome.message}
+`;
+  const r = outcome.report;
+  return [
+    `trace: feature ${outcome.feature}\u3001\u8A08\u753B ${outcome.plans.length} \u4EF6\uFF08${outcome.plans.join(", ")}\uFF09`,
+    `\u7D50\u679C: ${outcome.status === "ok" ? "OK" : "NG"}\uFF08\u30AB\u30D0\u30FC\u6E08\u307F ${r.covered.length} / ${r.required.length}\uFF09`,
+    `\u672A\u30AB\u30D0\u30FC: ${list(r.uncovered)}`,
+    `\u4E0D\u660E\u306A\u53C2\u7167: ${list(r.unknown)}`,
+    `\u7BC4\u56F2\u5916\u306E\u53C2\u7167\uFF08\u8B66\u544A\uFF09: ${list(r.outOfScope)}`,
+    `\u9069\u7528\u3055\u308C\u308B\u539F\u5247\uFF08\u7167\u5408\u5BFE\u8C61\u5916\uFF09: ${list(r.applicable)}`,
+    ""
+  ].join("\n");
+}
+var list;
+var init_trace_run = __esm({
+  "src/trace-run.ts"() {
+    "use strict";
+    init_base_diff();
+    init_feature();
+    init_hash();
+    init_io();
+    init_trace();
+    init_trace_state();
+    list = (xs) => xs.length ? xs.join(", ") : "\u306A\u3057";
   }
 });
 
@@ -28136,13 +28517,13 @@ var require_buffer_util = __commonJS({
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
-    function concat(list, totalLength) {
-      if (list.length === 0) return EMPTY_BUFFER;
-      if (list.length === 1) return list[0];
+    function concat(list2, totalLength) {
+      if (list2.length === 0) return EMPTY_BUFFER;
+      if (list2.length === 1) return list2[0];
       const target = Buffer.allocUnsafe(totalLength);
       let offset = 0;
-      for (let i = 0; i < list.length; i++) {
-        const buf = list[i];
+      for (let i = 0; i < list2.length; i++) {
+        const buf = list2[i];
         target.set(buf, offset);
         offset += buf.length;
       }
@@ -29928,14 +30309,14 @@ var require_sender = __commonJS({
        * @param {Function} [cb] Callback
        * @private
        */
-      sendFrame(list, cb) {
-        if (list.length === 2) {
+      sendFrame(list2, cb) {
+        if (list2.length === 2) {
           this._socket.cork();
-          this._socket.write(list[0]);
-          this._socket.write(list[1], cb);
+          this._socket.write(list2[0]);
+          this._socket.write(list2[1], cb);
           this._socket.uncork();
         } else {
-          this._socket.write(list[0], cb);
+          this._socket.write(list2[0], cb);
         }
       }
     };
@@ -30346,7 +30727,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes: randomBytes2, createHash: createHash2 } = __require("crypto");
+    var { randomBytes: randomBytes3, createHash: createHash3 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -30884,7 +31265,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes2(16).toString("base64");
+      const key = randomBytes3(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -31014,7 +31395,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash2("sha1").update(key + GUID).digest("base64");
+        const digest = createHash3("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -31383,7 +31764,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter3 = __require("events");
     var http = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash: createHash2 } = __require("crypto");
+    var { createHash: createHash3 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -31690,7 +32071,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash2("sha1").update(key + GUID).digest("base64");
+        const digest = createHash3("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -31792,46 +32173,6 @@ var init_wrapper = __esm({
   }
 });
 
-// src/base-diff.ts
-async function diffAgainstBase(repoRoot, model) {
-  const base = await resolveBaseCommit(repoRoot);
-  if (!base) return { base: null, changes: [] };
-  const baseModel = parseModel(await readModelFilesAt(repoRoot, base));
-  return { base, changes: diffModels(baseModel, model) };
-}
-var init_base_diff = __esm({
-  "src/base-diff.ts"() {
-    "use strict";
-    init_diff();
-    init_git();
-    init_io();
-  }
-});
-
-// src/feature.ts
-import { readFile as readFile3 } from "node:fs/promises";
-import { isAbsolute, join as join3 } from "node:path";
-async function resolveFeatureDir(repoRoot, env = process.env) {
-  const absolute = (p) => isAbsolute(p) ? p : join3(repoRoot, p);
-  if (env.SPECIFY_FEATURE_DIRECTORY) return absolute(env.SPECIFY_FEATURE_DIRECTORY);
-  try {
-    const data = JSON.parse(await readFile3(join3(repoRoot, ".geass", "feature.json"), "utf8"));
-    if (typeof data.feature_directory === "string" && data.feature_directory) return absolute(data.feature_directory);
-  } catch {
-  }
-  const branch = await currentBranch(repoRoot);
-  if (branch && FEATURE_BRANCH.test(branch)) return join3(repoRoot, "specs", branch);
-  return null;
-}
-var FEATURE_BRANCH;
-var init_feature = __esm({
-  "src/feature.ts"() {
-    "use strict";
-    init_git();
-    FEATURE_BRANCH = /^(\d{8}-\d{6}-[a-z0-9-]+|\d{3}-[a-z0-9-]+)$/;
-  }
-});
-
 // src/model/view-keys.ts
 function isViewKey(value) {
   return VIEW_KEYS.includes(value);
@@ -31854,8 +32195,8 @@ var init_view_keys = __esm({
 });
 
 // src/layout.ts
-import { mkdir as mkdir3, readFile as readFile4, writeFile as writeFile3 } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { mkdir as mkdir4, readFile as readFile5, writeFile as writeFile4 } from "node:fs/promises";
+import { join as join5 } from "node:path";
 function sanitize(data) {
   const out = {};
   if (data === null || typeof data !== "object" || Array.isArray(data)) return out;
@@ -31869,7 +32210,7 @@ function sanitize(data) {
 }
 async function readView(repoRoot, view) {
   try {
-    return sanitize((0, import_yaml2.parse)(await readFile4(join4(repoRoot, LAYOUT_DIR, `${view}.yaml`), "utf8")));
+    return sanitize((0, import_yaml2.parse)(await readFile5(join5(repoRoot, LAYOUT_DIR, `${view}.yaml`), "utf8")));
   } catch {
     return {};
   }
@@ -31882,8 +32223,8 @@ async function readLayout(repoRoot) {
 async function writeLayoutView(repoRoot, view, positions) {
   const merged = { ...await readView(repoRoot, view), ...sanitize(positions) };
   const sorted = Object.fromEntries(Object.keys(merged).sort().map((id) => [id, merged[id]]));
-  await mkdir3(join4(repoRoot, LAYOUT_DIR), { recursive: true });
-  await writeFile3(join4(repoRoot, LAYOUT_DIR, `${view}.yaml`), (0, import_yaml2.stringify)(sorted, { lineWidth: 0 }), "utf8");
+  await mkdir4(join5(repoRoot, LAYOUT_DIR), { recursive: true });
+  await writeFile4(join5(repoRoot, LAYOUT_DIR, `${view}.yaml`), (0, import_yaml2.stringify)(sorted, { lineWidth: 0 }), "utf8");
   return sorted;
 }
 var import_yaml2, LAYOUT_DIR;
@@ -31949,7 +32290,8 @@ var init_relations = __esm({
       "evt.source",
       "evt.target",
       "inf.related",
-      "st.information"
+      "st.information",
+      "pr.scope"
     ];
     RELATION_FIELDS = {
       "buc.actor": { field: "actors", shape: "ids" },
@@ -31962,7 +32304,8 @@ var init_relations = __esm({
       "evt.source": { field: "source", shape: "single" },
       "evt.target": { field: "target", shape: "single" },
       "inf.related": { field: "related", shape: "refs" },
-      "st.information": { field: "information", shape: "single" }
+      "st.information": { field: "information", shape: "single" },
+      "pr.scope": { field: "scope", shape: "ids" }
     };
     RELATION_TARGET_PREFIXES = {
       "buc.actor": ["act"],
@@ -31975,7 +32318,8 @@ var init_relations = __esm({
       "evt.source": ["act", "ext"],
       "evt.target": ["act", "ext"],
       "inf.related": ["inf"],
-      "st.information": ["inf"]
+      "st.information": ["inf"],
+      "pr.scope": ["act", "ext", "buc", "uc", "scr", "inf", "st"]
     };
     transitionPattern = new RegExp(`^(st\\.${SLUG}):(${SLUG})->(${SLUG})$`);
   }
@@ -32039,6 +32383,14 @@ function validate2(model) {
       warn("usecase-without-io", `${uc.id} \u306B\u753B\u9762\u3082\u30A4\u30D9\u30F3\u30C8\u3082\u7D10\u3065\u3044\u3066\u3044\u307E\u305B\u3093`, uc.id);
     }
     if (!inBuc.has(uc.id)) warn("usecase-without-buc", `${uc.id} \u304C\u3069\u306E BUC \u306B\u3082\u5C5E\u3057\u3066\u3044\u307E\u305B\u3093`, uc.id);
+    const acIds = /* @__PURE__ */ new Set();
+    for (const ac of uc.acceptance) {
+      if (acIds.has(ac.id)) error62("duplicate-acceptance", `${uc.id} \u306E\u53D7\u3051\u5165\u308C\u6761\u4EF6 ${ac.id} \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059`, uc.id);
+      acIds.add(ac.id);
+      if (!ac.when.trim() || !ac.then.trim()) {
+        error62("empty-acceptance", `${uc.id} \u306E\u53D7\u3051\u5165\u308C\u6761\u4EF6 ${ac.id} \u306E when / then \u304C\u7A7A\u3067\u3059`, uc.id);
+      }
+    }
   }
   for (const info of model.information) {
     if (!usedInformation.has(info.id)) warn("unused-information", `${info.id} \u3092\u6271\u3046\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u304C\u3042\u308A\u307E\u305B\u3093`, info.id);
@@ -32047,6 +32399,11 @@ function validate2(model) {
     for (const t of sm.transitions) {
       const ref = formatTransitionRef({ model: sm.id, from: t.from, to: t.to });
       if (!usedTransitions.has(ref)) warn("unused-transition", `${ref} \u3092\u8D77\u3053\u3059\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u304C\u3042\u308A\u307E\u305B\u3093`, sm.id);
+    }
+  }
+  for (const p of model.principles) {
+    if (p.level === "must" && !p.description?.trim()) {
+      warn("principle-without-description", `${p.id} \u306F MUST \u3067\u3059\u304C\u3001\u4F55\u3092\u6E80\u305F\u305B\u3070\u5B88\u3063\u305F\u3053\u3068\u306B\u306A\u308B\u304B\uFF08\u8AAC\u660E\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, p.id);
     }
   }
   return issues;
@@ -32060,9 +32417,9 @@ var init_validate = __esm({
 });
 
 // src/http.ts
-import { readFile as readFile5 } from "node:fs/promises";
+import { readFile as readFile6 } from "node:fs/promises";
 import { createServer } from "node:http";
-import { extname, join as join5, normalize, sep } from "node:path";
+import { extname, join as join6, normalize, sep as sep2 } from "node:path";
 function allowedHost(req) {
   return /^(127\.0\.0\.1|localhost):\d+$/.test(req.headers.host ?? "");
 }
@@ -32088,7 +32445,6 @@ async function readJson(req) {
 }
 async function startHttp(deps, port = 0) {
   const { store, reviewEvents, webRoot } = deps;
-  const env = deps.env ?? process.env;
   const now = deps.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
   const sockets = /* @__PURE__ */ new Set();
   const broadcast = (message) => {
@@ -32102,15 +32458,16 @@ async function startHttp(deps, port = 0) {
   store.on("layout", onLayout);
   reviewEvents.on("review", onReview);
   async function state() {
-    const featureDir = await resolveFeatureDir(store.repoRoot, env);
-    const review = featureDir ? await readReview(featureDir) : null;
+    const resolved = await resolveFeature(store.repoRoot);
+    const feature = isInvalidFeature(resolved) ? null : resolved;
+    const review = feature ? await readReview(feature.reviewFile) : null;
     return {
       version: store.version,
       parseError: store.parseError?.message ?? null,
       model: store.model,
       issues: validate2(store.model),
       layout: await readLayout(store.repoRoot),
-      featureDir,
+      feature: feature?.id ?? null,
       review,
       approval: review ? approvalState(review, store.version).state : "none"
     };
@@ -32139,16 +32496,17 @@ async function startHttp(deps, port = 0) {
     const decision = body.decision;
     if (decision !== "approved" && decision !== "rejected") throw new HttpError(400, "decision \u306F approved \u304B rejected \u3067\u3059");
     const comments = Array.isArray(body.comments) ? body.comments : [];
-    const featureDir = await resolveFeatureDir(store.repoRoot, env);
-    if (!featureDir) throw new HttpError(404, "feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093");
+    const feature = await resolveFeature(store.repoRoot);
+    if (!feature) throw new HttpError(404, "feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093");
+    if (isInvalidFeature(feature)) throw new HttpError(404, `\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093: ${feature.reason}`);
     const record2 = await store.exclusive(async () => {
       if (body.version !== store.version) throw new HttpError(409, "\u30EC\u30D3\u30E5\u30FC\u4E2D\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002\u6700\u65B0\u306E\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044");
       if (decision === "approved" && (store.parseError || hasErrors(validate2(store.model)))) {
         throw new HttpError(422, "\u30A8\u30E9\u30FC\u304C\u6B8B\u3063\u3066\u3044\u308B\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093");
       }
       try {
-        const next = decide(await readReview(featureDir), { decision, comments, hash: store.version, now: now() });
-        await writeReview(featureDir, next);
+        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: store.version, now: now() });
+        await writeReview(feature.reviewFile, next);
         return next;
       } catch (e) {
         if (e instanceof ReviewError) throw new HttpError(422, e.message);
@@ -32164,10 +32522,10 @@ async function startHttp(deps, port = 0) {
       return;
     }
     const root = normalize(webRoot);
-    const requested = normalize(join5(root, decodeURIComponent(pathname)));
-    const file2 = requested.startsWith(root + sep) && extname(requested) ? requested : join5(root, "index.html");
+    const requested = normalize(join6(root, decodeURIComponent(pathname)));
+    const file2 = requested.startsWith(root + sep2) && extname(requested) ? requested : join6(root, "index.html");
     try {
-      const body = await readFile5(file2);
+      const body = await readFile6(file2);
       res.writeHead(200, { "content-type": CONTENT_TYPES[extname(file2)] ?? "application/octet-stream" }).end(body);
     } catch {
       if (file2.endsWith("index.html")) {
@@ -32215,7 +32573,7 @@ async function startHttp(deps, port = 0) {
       ws.on("close", () => sockets.delete(ws));
     });
   });
-  await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
+  await new Promise((resolve3) => server.listen(port, "127.0.0.1", resolve3));
   const { port: actualPort } = server.address();
   return {
     url: `http://127.0.0.1:${actualPort}/`,
@@ -32225,7 +32583,7 @@ async function startHttp(deps, port = 0) {
       reviewEvents.off("review", onReview);
       for (const socket of sockets) socket.terminate();
       wss.close();
-      await new Promise((resolve) => server.close(() => resolve()));
+      await new Promise((resolve3) => server.close(() => resolve3()));
     }
   };
 }
@@ -37106,7 +37464,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve.call(this, root, ref);
+      let _sch = resolve3.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -37133,7 +37491,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve(root, ref) {
+    function resolve3(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -37963,7 +38321,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve(baseURI, relativeURI, options) {
+    function resolve3(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -38332,7 +38690,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize: normalize2,
-      resolve,
+      resolve: resolve3,
       resolveComponent,
       equal,
       serialize,
@@ -41295,8 +41653,8 @@ var require_dist2 = __commonJS({
         return ajv;
       }
       const [formats, exportName] = opts.mode === "fast" ? [formats_1.fastFormats, fastName] : [formats_1.fullFormats, fullName];
-      const list = opts.formats || formats_1.formatNames;
-      addFormats(ajv, list, formats, exportName);
+      const list2 = opts.formats || formats_1.formatNames;
+      addFormats(ajv, list2, formats, exportName);
       if (opts.keywords)
         (0, limit_1.default)(ajv);
       return ajv;
@@ -41308,11 +41666,11 @@ var require_dist2 = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs, exportName) {
+    function addFormats(ajv, list2, fs, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
-      for (const f of list)
+      for (const f of list2)
         ajv.addFormat(f, fs[f]);
     }
     module.exports = exports = formatsPlugin;
@@ -41412,7 +41770,6 @@ var init_mcp2 = __esm({
     init_zod();
     init_base_diff();
     init_feature();
-    init_git();
     init_io();
     init_kinds();
     init_relations();
@@ -41451,14 +41808,14 @@ function upsert(model, key, patch) {
   const id = patch.id;
   if (typeof id !== "string" || id === "") throw new OperationError("upsert \u306B\u306F id \u304C\u5FC5\u8981\u3067\u3059");
   const def = kindDef(key);
-  const list = model[key];
-  const index = list.findIndex((e) => e.id === id);
-  const merged = index >= 0 ? { ...list[index], ...patch } : { ...patch };
+  const list2 = model[key];
+  const index = list2.findIndex((e) => e.id === id);
+  const merged = index >= 0 ? { ...list2[index], ...patch } : { ...patch };
   for (const key2 of Object.keys(merged)) if (merged[key2] === null) delete merged[key2];
   const result = def.schema.safeParse(merged);
   if (!result.success) throw new OperationError(formatIssues(id, result.error.issues));
-  if (index >= 0) list[index] = result.data;
-  else list.push(result.data);
+  if (index >= 0) list2[index] = result.data;
+  else list2.push(result.data);
 }
 function detach(model, relation, from, to) {
   const found = findElement(model, from);
@@ -41466,17 +41823,17 @@ function detach(model, relation, from, to) {
   const fields = elementFields(found.element);
   const { field, shape } = RELATION_FIELDS[relation];
   if (shape === "ids") {
-    const list = fields[field];
-    const index = list.indexOf(to);
+    const list2 = fields[field];
+    const index = list2.indexOf(to);
     if (index < 0) return false;
-    list.splice(index, 1);
+    list2.splice(index, 1);
     return true;
   }
   if (shape === "refs") {
-    const list = fields[field];
-    const index = list.findIndex((x) => x.ref === to);
+    const list2 = fields[field];
+    const index = list2.findIndex((x) => x.ref === to);
     if (index < 0) return false;
-    list.splice(index, 1);
+    list2.splice(index, 1);
     return true;
   }
   if (fields[field] !== to) return false;
@@ -41506,13 +41863,13 @@ function link(model, relation, from, to, attrs = {}) {
   const fields = elementFields(found.element);
   const { field, shape } = RELATION_FIELDS[relation];
   if (shape === "ids") {
-    const list = fields[field];
-    if (!list.includes(to)) list.push(to);
+    const list2 = fields[field];
+    if (!list2.includes(to)) list2.push(to);
   } else if (shape === "refs") {
-    const list = fields[field];
-    const existing = list.find((x) => x.ref === to);
+    const list2 = fields[field];
+    const existing = list2.find((x) => x.ref === to);
     if (existing) Object.assign(existing, attrs);
-    else list.push({ ref: to, ...attrs });
+    else list2.push({ ref: to, ...attrs });
   } else {
     fields[field] = to;
   }
@@ -41558,8 +41915,8 @@ var init_operations = __esm({
 
 // src/store.ts
 import { EventEmitter } from "node:events";
-import { existsSync, watch } from "node:fs";
-import { join as join6 } from "node:path";
+import { existsSync as existsSync2, watch } from "node:fs";
+import { join as join7 } from "node:path";
 var issueKey, RdraStore;
 var init_store = __esm({
   "src/store.ts"() {
@@ -41629,8 +41986,8 @@ var init_store = __esm({
       }
       startWatcher() {
         if (!this.watching || this.watcher) return;
-        const dir = join6(this.repoRoot, RDRA_DIR);
-        if (!existsSync(dir)) return;
+        const dir = join7(this.repoRoot, RDRA_DIR);
+        if (!existsSync2(dir)) return;
         this.watcher = watch(dir, () => this.scheduleReload());
       }
       scheduleReload() {
@@ -41707,10 +42064,10 @@ var init_store = __esm({
 });
 
 // src/server.ts
-import { dirname, join as join7 } from "node:path";
+import { dirname as dirname3, join as join8 } from "node:path";
 import { fileURLToPath } from "node:url";
 function bundledWebRoot() {
-  return join7(dirname(fileURLToPath(import.meta.url)), "web");
+  return join8(dirname3(fileURLToPath(import.meta.url)), "web");
 }
 var init_server3 = __esm({
   "src/server.ts"() {
@@ -41735,9 +42092,9 @@ async function serve(repoRoot, port, io) {
   store.watch();
   const http = await startHttp({ store, reviewEvents: new EventEmitter2(), webRoot: bundledWebRoot() }, port);
   io.out(JSON.stringify({ url: http.url }) + "\n");
-  await new Promise((resolve) => {
-    process.once("SIGINT", resolve);
-    process.once("SIGTERM", resolve);
+  await new Promise((resolve3) => {
+    process.once("SIGINT", resolve3);
+    process.once("SIGTERM", resolve3);
   });
   await http.close();
   store.close();
@@ -41757,60 +42114,30 @@ var cli_exports = {};
 __export(cli_exports, {
   runCli: () => runCli
 });
-import { join as join8, relative } from "node:path";
+import { resolve as resolve2 } from "node:path";
 import { parseArgs } from "node:util";
-async function loadModel(repo) {
-  return parseModel(await readModelFiles(repo));
+async function checkApproval(repo, io) {
+  const { state, message, changed } = await checkFeatureApproval(repo);
+  io.out(JSON.stringify(changed ? { state, message, changed } : { state, message }) + "\n");
+  if (state === "approved") return 0;
+  if (state === "outside") return 2;
+  if (state === "error") return 3;
+  return 1;
 }
-async function changedSinceApproval(repo, featureDir, current) {
-  const commit = await lastCommitTouching(repo, relative(repo, join8(featureDir, REVIEW_FILE)));
-  if (!commit) return void 0;
+async function safeRead(file2) {
   try {
-    const approved = parseModel(await readModelFilesAt(repo, commit));
-    return diffModels(approved, current).map((c) => `${c.type} ${c.id}`);
-  } catch {
-    return void 0;
-  }
-}
-async function checkApproval(repo, featureDir, io) {
-  let model;
-  try {
-    model = await loadModel(repo);
-  } catch (e) {
-    if (!(e instanceof ModelParseError)) throw e;
-    io.out(JSON.stringify({ state: "error", message: `RDRA \u306E YAML \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}` }) + "\n");
-    return 3;
-  }
-  let review;
-  try {
-    review = await readReview(featureDir);
-  } catch (e) {
-    io.out(JSON.stringify({ state: "error", message: `rdra-review.json \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}` }) + "\n");
-    return 3;
-  }
-  const state = approvalState(review, modelHash(model));
-  const result = { state: state.state, message: MESSAGES[state.state] };
-  if (state.state === "stale") {
-    const changed = await changedSinceApproval(repo, featureDir, model);
-    if (changed) result.changed = changed;
-  }
-  io.out(JSON.stringify(result) + "\n");
-  return state.state === "approved" ? 0 : 1;
-}
-async function safeRead(featureDir) {
-  try {
-    return await readReview(featureDir);
+    return await readReview(file2);
   } catch {
     return null;
   }
 }
-async function waitReview(featureDir, intervalMs, timeoutSec, io) {
+async function waitReview(file2, intervalMs, timeoutSec, io) {
   const sleep = io.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   let initial;
   try {
-    initial = await readReview(featureDir);
+    initial = await readReview(file2);
   } catch (e) {
-    io.out(JSON.stringify({ state: "error", message: `rdra-review.json \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}` }) + "\n");
+    io.out(JSON.stringify({ state: "error", message: `\u627F\u8A8D\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}` }) + "\n");
     return 3;
   }
   if (initial.status !== "pending") {
@@ -41820,7 +42147,7 @@ async function waitReview(featureDir, intervalMs, timeoutSec, io) {
   const deadline = timeoutSec > 0 ? Date.now() + timeoutSec * 1e3 : Number.POSITIVE_INFINITY;
   for (; ; ) {
     await sleep(intervalMs);
-    const record2 = await safeRead(featureDir);
+    const record2 = await safeRead(file2);
     if (record2 && record2.status !== "pending") {
       io.out(JSON.stringify({ status: record2.status, lastRound: record2.rounds.at(-1) ?? null }) + "\n");
       return 0;
@@ -41839,10 +42166,11 @@ async function runCli(argv, io = defaultIo) {
       args: rest,
       options: {
         repo: { type: "string" },
-        "feature-dir": { type: "string" },
         "interval-ms": { type: "string" },
         "timeout-sec": { type: "string" },
-        port: { type: "string" }
+        port: { type: "string" },
+        skill: { type: "string" },
+        path: { type: "string" }
       },
       strict: true
     }));
@@ -41852,10 +42180,26 @@ ${USAGE}`);
     return 64;
   }
   const repo = values.repo;
-  const featureDir = values["feature-dir"];
-  if (command === "check-approval" && repo && featureDir) return checkApproval(repo, featureDir, io);
-  if (command === "wait-review" && repo && featureDir) {
-    return waitReview(featureDir, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
+  if (command === "check-approval" && repo) return checkApproval(repo, io);
+  if (command === "wait-review" && repo) {
+    const feature = await resolveFeature(repo);
+    if (!feature || isInvalidFeature(feature)) {
+      io.out(JSON.stringify({ state: "error", message: feature ? feature.reason : APPROVAL_MESSAGES.outside }) + "\n");
+      return 3;
+    }
+    return waitReview(feature.reviewFile, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
+  }
+  if (command === "trace" && repo) {
+    const outcome = await runTrace(repo, (/* @__PURE__ */ new Date()).toISOString());
+    io.out(formatTrace(outcome));
+    const payload = outcome.status === "error" ? outcome : { status: outcome.status, feature: outcome.feature, plans: outcome.plans, ...outcome.report };
+    io.out(JSON.stringify(payload) + "\n");
+    return outcome.status === "ok" ? 0 : outcome.status === "failed" ? 1 : 2;
+  }
+  if (command === "gate" && repo && (values.skill || values.path)) {
+    const decision = values.path ? gatePath(resolve2(repo, values.path)) : await gateSkill(repo, values.skill);
+    io.out(JSON.stringify(decision) + "\n");
+    return decision.decision === "allow" ? 0 : 1;
   }
   if (command === "serve" && repo) {
     const { serve: serve2 } = await Promise.resolve().then(() => (init_serve(), serve_exports));
@@ -41863,7 +42207,7 @@ ${USAGE}`);
   }
   if (command === "hash" && repo) {
     try {
-      io.out(modelHash(await loadModel(repo)) + "\n");
+      io.out(modelHash(parseModel(await readModelFiles(repo))) + "\n");
       return 0;
     } catch (e) {
       if (!(e instanceof ModelParseError)) throw e;
@@ -41875,34 +42219,31 @@ ${USAGE}`);
   io.err(USAGE);
   return 64;
 }
-var defaultIo, USAGE, MESSAGES;
+var defaultIo, USAGE;
 var init_cli = __esm({
   "src/cli.ts"() {
     "use strict";
-    init_diff();
-    init_git();
+    init_approval();
+    init_feature();
+    init_gate();
     init_hash();
     init_io();
     init_review();
+    init_trace_run();
     defaultIo = {
       out: (s) => void process.stdout.write(s),
       err: (s) => void process.stderr.write(s)
     };
     USAGE = [
       "usage:",
-      "  cli.js check-approval --repo <root> --feature-dir <dir>",
-      "  cli.js wait-review --repo <root> --feature-dir <dir> [--interval-ms 1000] [--timeout-sec 0]",
+      "  cli.js check-approval --repo <root>",
+      "  cli.js wait-review --repo <root> [--interval-ms 1000] [--timeout-sec 0]",
+      "  cli.js trace --repo <root>",
+      "  cli.js gate --repo <root> (--skill <name> | --path <file>)",
       "  cli.js hash --repo <root>",
       "  cli.js serve --repo <root> [--port 0]",
       ""
     ].join("\n");
-    MESSAGES = {
-      none: "RDRA \u306E\u30EC\u30D3\u30E5\u30FC\u304C\u307E\u3060\u4F9D\u983C\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002/rdra \u3067\u30E2\u30C7\u30EB\u3092\u4F5C\u6210\u3057\u3001\u30EC\u30D3\u30E5\u30FC\u3092\u5B8C\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-      pending: "RDRA \u306E\u30EC\u30D3\u30E5\u30FC\u304C\u627F\u8A8D\u5F85\u3061\u3067\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u627F\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-      rejected: "RDRA \u304C\u5DEE\u3057\u623B\u3055\u308C\u3066\u3044\u307E\u3059\u3002/rdra \u3067\u30B3\u30E1\u30F3\u30C8\u306B\u5BFE\u5FDC\u3057\u3001\u518D\u5EA6\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-      stale: "\u627F\u8A8D\u5F8C\u306B RDRA \u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002/rdra \u3067\u518D\u30EC\u30D3\u30E5\u30FC\u3092\u53D7\u3051\u3066\u304F\u3060\u3055\u3044\u3002",
-      approved: "RDRA \u306F\u627F\u8A8D\u6E08\u307F\u3067\u3059\u3002"
-    };
   }
 });
 

@@ -1,17 +1,16 @@
-import { join } from "node:path";
+import { relative } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { diffAgainstBase } from "./base-diff.js";
-import { resolveFeatureDir } from "./feature.js";
-import { resolveBaseCommit } from "./git.js";
+import { NO_BASE_MESSAGE, diffAgainstBase } from "./base-diff.js";
+import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { ModelParseError } from "./model/io.js";
 import { KIND_KEYS } from "./model/kinds.js";
 import { RELATION_KINDS } from "./model/relations.js";
 import type { Operation } from "./operations.js";
 import type { QueryIndex } from "./query.js";
-import { REVIEW_FILE, approvalState, readReview, requestReview, writeReview } from "./review.js";
+import { approvalState, readReview, requestReview, writeReview } from "./review.js";
 import type { RdraStore } from "./store.js";
-import { hasErrors, validate } from "./validate.js";
+import { hasErrors, validate, validateChanges } from "./validate.js";
 import { SERVER_VERSION } from "./version.js";
 
 export interface McpDeps {
@@ -19,7 +18,6 @@ export interface McpDeps {
   index: QueryIndex;
   reviewUrl: () => string | null;
   now?: () => string;
-  env?: NodeJS.ProcessEnv;
   onReviewChange?: () => void;
 }
 
@@ -37,12 +35,21 @@ const linkShape = z.object({
 export function createMcpServer(deps: McpDeps): McpServer {
   const { store, index } = deps;
   const now = deps.now ?? (() => new Date().toISOString());
-  const env = deps.env ?? process.env;
   const server = new McpServer({ name: "geass-rdra", version: SERVER_VERSION });
 
   const applyTool = async (ops: Operation[]): Promise<ToolResult> => {
     const result = await store.apply(ops);
     return result.ok ? json(result) : fail(`${result.reason}: ${result.message}`);
+  };
+
+  /** Issues in this feature's change, or null on a feature branch whose diff base cannot be resolved. */
+  const featureIssues = async () => {
+    const diff = await diffAgainstBase(store.repoRoot, store.model);
+    if (!diff.base) {
+      const feature = await resolveFeature(store.repoRoot);
+      if (feature && !isInvalidFeature(feature)) return null;
+    }
+    return validateChanges(diff.changes);
   };
 
   server.registerTool(
@@ -65,7 +72,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_query",
     {
       description:
-        "RDRA モデルに読み取り専用の SQL で問い合わせる。テーブル: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref)。種別ごとのビュー: actors, external_systems, bucs, usecases, screens, events, information, state_models。",
+        "RDRA モデルに読み取り専用の SQL で問い合わせる。テーブル: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref), acceptance(usecase_id, ac_id, ref, given_text, when_text, then_text)。ビュー: principle_scope(principle_id, target_id)、種別ごとの actors, external_systems, bucs, usecases, screens, events, information, state_models, principles。",
       inputSchema: { sql: z.string().min(1) },
     },
     async ({ sql }) => {
@@ -80,8 +87,17 @@ export function createMcpServer(deps: McpDeps): McpServer {
 
   server.registerTool(
     "rdra_validate",
-    { description: "RDRA モデルの整合性チェック。error はレビュー依頼を妨げ、warning は妨げない。", inputSchema: {} },
-    async () => json({ parseError: store.parseError?.message ?? null, issues: validate(store.model) }),
+    { description: "RDRA モデルの整合性チェック。issues の error と featureIssues（この feature の差分に対する検査）はレビュー依頼を妨げ、warning は妨げない。", inputSchema: {} },
+    async () => {
+      try {
+        const changeIssues = await featureIssues();
+        if (!changeIssues) return fail(`この feature の差分を検査できません: ${NO_BASE_MESSAGE}`);
+        return json({ parseError: store.parseError?.message ?? null, issues: validate(store.model), featureIssues: changeIssues });
+      } catch (e) {
+        if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
+        throw e;
+      }
+    },
   );
 
   server.registerTool(
@@ -103,7 +119,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_upsert",
     {
       description:
-        "要素を追加または更新する（既存 ID なら指定したフィールドだけを上書き）。kind: actors, externalSystems, bucs, usecases, screens, events, information, states。ID は <接頭辞>.<スラッグ>（act, ext, buc, uc, scr, evt, inf, st）。",
+        "要素を追加または更新する（既存 ID なら指定したフィールドだけを上書き）。kind: actors, externalSystems, bucs, usecases, screens, events, information, states, principles。ID は <接頭辞>.<スラッグ>（act, ext, buc, uc, scr, evt, inf, st, pr）。principles は category（business/quality/security/engineering/technology）と level（must/should）が必須。usecases の acceptance は [{id, given?, when, then}]。",
       inputSchema: {
         items: z.array(z.object({ kind: z.enum(KIND_KEYS), element: z.record(z.string(), z.unknown()) })).min(1),
       },
@@ -121,7 +137,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_link",
     {
       description:
-        "関連を張る。relation は起点の種別で決まる（例: uc.screen は uc -> scr）。uc.information には attrs.access（create/read/update/delete）が必要。uc.transition の to は st.<モデル>:<状態>-><状態>。inf.related には任意で attrs.label。",
+        "関連を張る。relation は起点の種別で決まる（例: uc.screen は uc -> scr）。uc.information には attrs.access（create/read/update/delete）が必要。uc.transition の to は st.<モデル>:<状態>-><状態>。inf.related には任意で attrs.label。pr.scope は pr -> act/ext/buc/uc/scr/inf/st（原則がかかる要素）。",
       inputSchema: {
         links: z.array(linkShape.extend({ attrs: z.record(z.string(), z.string()).optional() })).min(1),
       },
@@ -143,28 +159,37 @@ export function createMcpServer(deps: McpDeps): McpServer {
       inputSchema: {},
     },
     async () => {
-      const featureDir = await resolveFeatureDir(store.repoRoot, env);
-      if (!featureDir) {
-        return fail("feature の外ではレビューを依頼できません。feature の worktree で実行するか、.geass/feature.json を設定してください");
+      const feature = await resolveFeature(store.repoRoot);
+      if (!feature) {
+        return fail("feature の外ではレビューを依頼できません。feature/* ブランチ（/feature-start で作った worktree）で実行してください");
       }
+      if (isInvalidFeature(feature)) return fail(`レビューを依頼できません: ${feature.reason}`);
       if (store.parseError) return fail(`YAML にエラーがあります: ${store.parseError.message}`);
       const issues = validate(store.model);
       if (hasErrors(issues)) {
         const errors = issues.filter((i) => i.level === "error").map((i) => `- ${i.message}`);
         return fail(`エラーを解消してからレビューを依頼してください:\n${errors.join("\n")}`);
       }
+      let blockers;
+      try {
+        blockers = await featureIssues();
+      } catch (e) {
+        if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
+        throw e;
+      }
+      if (!blockers) return fail(`受け入れ条件を検査できないためレビューを依頼できません: ${NO_BASE_MESSAGE}`);
+      if (blockers.length > 0) {
+        return fail(`受け入れ条件が足りないためレビューを依頼できません:\n${blockers.map((i) => `- ${i.message}`).join("\n")}`);
+      }
       // Read-modify-write under the store lock so it cannot race a decision
       // arriving from the review UI.
       const record = await store.exclusive(async () => {
-        const next = requestReview(await readReview(featureDir), {
-          now: now(),
-          baseCommit: await resolveBaseCommit(store.repoRoot),
-        });
-        await writeReview(featureDir, next);
+        const next = requestReview(await readReview(feature.reviewFile), { now: now() });
+        await writeReview(feature.reviewFile, next);
         return next;
       });
       deps.onReviewChange?.();
-      return json({ status: record.status, url: deps.reviewUrl(), reviewFile: join(featureDir, REVIEW_FILE) });
+      return json({ status: record.status, url: deps.reviewUrl(), reviewFile: relative(store.repoRoot, feature.reviewFile) });
     },
   );
 
@@ -172,9 +197,12 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_review_status",
     { description: "レビューの状態（none / pending / approved / rejected）と、最後の判断のコメント。approval が stale なら承認後にモデルが変更されている。", inputSchema: {} },
     async () => {
-      const featureDir = await resolveFeatureDir(store.repoRoot, env);
-      if (!featureDir) return json({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note: "feature の外です" });
-      const record = await readReview(featureDir);
+      const feature = await resolveFeature(store.repoRoot);
+      if (!feature || isInvalidFeature(feature)) {
+        const note = feature ? feature.reason : "feature の外です";
+        return json({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note });
+      }
+      const record = await readReview(feature.reviewFile);
       return json({
         status: record.status,
         approval: approvalState(record, store.version).state,

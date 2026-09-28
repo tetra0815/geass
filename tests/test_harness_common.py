@@ -13,22 +13,18 @@ def run_bash(repo: Path, script: str) -> subprocess.CompletedProcess:
     )
 
 
-def test_handoff_defaults_to_design_spec(repo: Path) -> None:
-    assert run_bash(repo, 'feature_handoff_command "$PWD"').stdout == "/design-spec"
+def test_git_flow_config_falls_back_to_the_default(repo: Path) -> None:
+    assert run_bash(repo, "git_flow_config branch.develop develop").stdout == "develop"
+    git(repo, "config", "gitflow.branch.develop", "dev")
+    assert run_bash(repo, "git_flow_config branch.develop develop").stdout == "dev"
 
 
-def test_handoff_is_rdra_when_approval_is_required(repo: Path) -> None:
-    write_json(repo / ".geass" / "init-options.json", {"require_rdra_approval": True})
-    assert run_bash(repo, 'feature_handoff_command "$PWD"').stdout == "/rdra"
+def test_terminal_multiplexer_defaults_to_wezterm(repo: Path) -> None:
+    assert run_bash(repo, 'terminal_multiplexer "$PWD"').stdout == "wezterm"
+    write_json(repo / ".geass" / "init-options.json", {"terminal_multiplexer": "tmux"})
+    assert run_bash(repo, 'terminal_multiplexer "$PWD"').stdout == "tmux"
 
 
-def test_handoff_stays_design_spec_when_explicitly_disabled(repo: Path) -> None:
-    write_json(repo / ".geass" / "init-options.json", {"require_rdra_approval": False})
-    assert run_bash(repo, 'feature_handoff_command "$PWD"').stdout == "/design-spec"
-
-
-def test_record_base_commit_writes_branch_config(repo: Path) -> None:
-    head = git(repo, "rev-parse", "HEAD").strip()
-    result = run_bash(repo, f'record_base_commit "$PWD" 20260925-120000-demo {head}')
-    assert result.returncode == 0, result.stderr
-    assert git(repo, "config", "--get", "branch.20260925-120000-demo.geass-base-commit").strip() == head
+def test_removed_helpers_are_gone(repo: Path) -> None:
+    for name in ["feature_handoff_command", "record_base_commit", "require_root_branch", "generate_slug_name"]:
+        assert run_bash(repo, f"type {name}").returncode != 0, name
