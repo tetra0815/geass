@@ -1,4 +1,5 @@
-import { KINDS, type Model } from "./model/kinds.js";
+import type { ElementChange } from "./diff.js";
+import { KINDS, type Model, type Usecase } from "./model/kinds.js";
 import {
   RELATION_TARGET_PREFIXES,
   formatTransitionRef,
@@ -101,4 +102,15 @@ export function validate(model: Model): Issue[] {
   }
 
   return issues;
+}
+
+export function validateChanges(changes: ElementChange[]): Issue[] {
+  return changes
+    .filter((c) => c.kind === "usecases" && c.type !== "removed" && (c.after as Usecase).acceptance.length === 0)
+    .map((c) => ({
+      level: "error" as const,
+      code: "usecase-without-acceptance",
+      message: `${c.id} に受け入れ条件がありません（この feature で追加・変更したユースケースには 1 件以上必要です）`,
+      elementId: c.id,
+    }));
 }

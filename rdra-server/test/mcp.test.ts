@@ -133,4 +133,19 @@ describe("MCP tools", () => {
     expect(record).not.toHaveProperty("base_commit");
     expect((await call("rdra_review_status")).json()).toMatchObject({ status: "pending", approval: "pending", lastRound: null });
   });
+
+  it("refuses a review while a changed usecase has no acceptance criteria", async () => {
+    const repo = await makeFeatureRepo(rdraFiles());
+    const { call } = await connect(repo);
+    await call("rdra_upsert", { items: [{ kind: "usecases", element: { id: "uc.place-order", name: "注文を確定する" } }] });
+    expect((await call("rdra_validate")).json().featureIssues.map((i: { code: string }) => i.code)).toEqual(["usecase-without-acceptance"]);
+    const refused = await call("rdra_request_review");
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("uc.place-order");
+
+    await call("rdra_upsert", {
+      items: [{ kind: "usecases", element: { id: "uc.place-order", acceptance: [{ id: "ac1", when: "注文する", then: "作られる" }] } }],
+    });
+    expect((await call("rdra_request_review")).isError).toBe(false);
+  });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { diffModels } from "../src/diff.js";
 import { parseModel } from "../src/model/io.js";
 import { formatTransitionRef, parseTransitionRef, relationsOf } from "../src/model/relations.js";
-import { hasErrors, validate } from "../src/validate.js";
+import { hasErrors, validate, validateChanges } from "../src/validate.js";
+import { emptyModel } from "../src/model/kinds.js";
 import { sampleFiles, sampleModel } from "./fixtures.js";
 
 const codes = (files: Record<string, string>) => validate(parseModel(files)).map((i) => `${i.level}:${i.code}:${i.elementId ?? ""}`);
@@ -143,5 +145,27 @@ describe("validate", () => {
         "error:empty-acceptance:uc.place-order",
       ]);
     });
+  });
+});
+
+describe("validateChanges", () => {
+  it("requires acceptance criteria only on added or modified usecases", () => {
+    const base = sampleModel();
+    const head = sampleModel();
+    head.usecases[0].name = "注文を確定する";
+    head.screens[0].name = "カート画面";
+    expect(validateChanges(diffModels(base, head)).map((i) => `${i.level}:${i.code}:${i.elementId}`)).toEqual([
+      "error:usecase-without-acceptance:uc.place-order",
+    ]);
+    head.usecases[0].acceptance.push({ id: "ac1", when: "注文する", then: "作られる" });
+    expect(validateChanges(diffModels(base, head))).toEqual([]);
+  });
+
+  it("ignores removed usecases and unchanged ones", () => {
+    const head = sampleModel();
+    head.usecases = [];
+    expect(validateChanges(diffModels(sampleModel(), head))).toEqual([]);
+    expect(validateChanges(diffModels(sampleModel(), sampleModel()))).toEqual([]);
+    expect(validateChanges(diffModels(emptyModel(), emptyModel()))).toEqual([]);
   });
 });

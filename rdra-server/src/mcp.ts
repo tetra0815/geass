@@ -10,7 +10,7 @@ import type { Operation } from "./operations.js";
 import type { QueryIndex } from "./query.js";
 import { approvalState, readReview, requestReview, writeReview } from "./review.js";
 import type { RdraStore } from "./store.js";
-import { hasErrors, validate } from "./validate.js";
+import { hasErrors, validate, validateChanges } from "./validate.js";
 import { SERVER_VERSION } from "./version.js";
 
 export interface McpDeps {
@@ -41,6 +41,8 @@ export function createMcpServer(deps: McpDeps): McpServer {
     const result = await store.apply(ops);
     return result.ok ? json(result) : fail(`${result.reason}: ${result.message}`);
   };
+
+  const featureIssues = async () => validateChanges((await diffAgainstBase(store.repoRoot, store.model)).changes);
 
   server.registerTool(
     "rdra_get_model",
@@ -77,8 +79,15 @@ export function createMcpServer(deps: McpDeps): McpServer {
 
   server.registerTool(
     "rdra_validate",
-    { description: "RDRA モデルの整合性チェック。error はレビュー依頼を妨げ、warning は妨げない。", inputSchema: {} },
-    async () => json({ parseError: store.parseError?.message ?? null, issues: validate(store.model) }),
+    { description: "RDRA モデルの整合性チェック。issues の error と featureIssues（この feature の差分に対する検査）はレビュー依頼を妨げ、warning は妨げない。", inputSchema: {} },
+    async () => {
+      try {
+        return json({ parseError: store.parseError?.message ?? null, issues: validate(store.model), featureIssues: await featureIssues() });
+      } catch (e) {
+        if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
+        throw e;
+      }
+    },
   );
 
   server.registerTool(
@@ -149,6 +158,16 @@ export function createMcpServer(deps: McpDeps): McpServer {
       if (hasErrors(issues)) {
         const errors = issues.filter((i) => i.level === "error").map((i) => `- ${i.message}`);
         return fail(`エラーを解消してからレビューを依頼してください:\n${errors.join("\n")}`);
+      }
+      let blockers;
+      try {
+        blockers = await featureIssues();
+      } catch (e) {
+        if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
+        throw e;
+      }
+      if (blockers.length > 0) {
+        return fail(`受け入れ条件が足りないためレビューを依頼できません:\n${blockers.map((i) => `- ${i.message}`).join("\n")}`);
       }
       // Read-modify-write under the store lock so it cannot race a decision
       // arriving from the review UI.
