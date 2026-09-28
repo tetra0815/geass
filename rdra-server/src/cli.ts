@@ -7,6 +7,7 @@ import { modelHash } from "./model/hash.js";
 import { ModelParseError, parseModel, readModelFiles } from "./model/io.js";
 import type { Model } from "./model/kinds.js";
 import { approvalState, readReview, type ReviewRecord } from "./review.js";
+import { formatTrace, runTrace } from "./trace-run.js";
 
 export interface CliIo {
   out: (s: string) => void;
@@ -23,6 +24,7 @@ const USAGE = [
   "usage:",
   "  cli.js check-approval --repo <root>",
   "  cli.js wait-review --repo <root> [--interval-ms 1000] [--timeout-sec 0]",
+  "  cli.js trace --repo <root>",
   "  cli.js hash --repo <root>",
   "  cli.js serve --repo <root> [--port 0]",
   "",
@@ -147,6 +149,13 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return 3;
     }
     return waitReview(feature.reviewFile, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
+  }
+  if (command === "trace" && repo) {
+    const outcome = await runTrace(repo, new Date().toISOString());
+    io.out(formatTrace(outcome));
+    const payload = outcome.status === "error" ? outcome : { status: outcome.status, feature: outcome.feature, plans: outcome.plans, ...outcome.report };
+    io.out(JSON.stringify(payload) + "\n");
+    return outcome.status === "ok" ? 0 : outcome.status === "failed" ? 1 : 2;
   }
   if (command === "serve" && repo) {
     const { serve } = await import("./serve.js");
