@@ -3,28 +3,28 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+import { REVIEWS_DIR } from "../src/feature.js";
 import { RDRA_DIR } from "../src/model/io.js";
-import { REVIEW_FILE, emptyReview, requestReview, type ReviewRecord } from "../src/review.js";
+import { emptyReview, requestReview, type ReviewRecord } from "../src/review.js";
 import { sampleFiles } from "../test/fixtures.js";
-import { makeRepo } from "../test/helpers.js";
+import { makeFeatureRepo } from "../test/helpers.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = join(root, "dist", "cli.js");
-const FEATURE = "specs/001-demo";
 
 let repo: string;
 let server: ChildProcess;
 let url: string;
 
-const reviewPath = () => join(repo, FEATURE, REVIEW_FILE);
+const reviewPath = () => join(repo, REVIEWS_DIR, "001-demo.json");
 const readRecord = async () => JSON.parse(await readFile(reviewPath(), "utf8")) as ReviewRecord;
 const requestAgain = async (record: ReviewRecord) =>
-  writeFile(reviewPath(), JSON.stringify(requestReview(record, { now: new Date().toISOString(), baseCommit: null }), null, 2));
+  writeFile(reviewPath(), JSON.stringify(requestReview(record, { now: new Date().toISOString() }), null, 2));
 
 test.beforeAll(async () => {
   const files = Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
-  repo = await makeRepo({ ...files, ".geass/feature.json": JSON.stringify({ feature_directory: FEATURE }) });
-  await mkdir(join(repo, FEATURE), { recursive: true });
+  repo = await makeFeatureRepo(files);
+  await mkdir(join(repo, REVIEWS_DIR), { recursive: true });
   await requestAgain(emptyReview());
   server = spawn("node", [cli, "serve", "--repo", repo], { stdio: ["ignore", "pipe", "ignore"] });
   url = await new Promise<string>((resolve, reject) => {
@@ -74,6 +74,6 @@ test("edit the model, reject with a comment, then approve", async ({ page }) => 
   const approved = await readRecord();
   const hash = spawnSync("node", [cli, "hash", "--repo", repo], { encoding: "utf8" }).stdout.trim();
   expect(approved).toMatchObject({ status: "approved", approved_hash: hash });
-  const check = spawnSync("node", [cli, "check-approval", "--repo", repo, "--feature-dir", join(repo, FEATURE)], { encoding: "utf8" });
+  const check = spawnSync("node", [cli, "check-approval", "--repo", repo], { encoding: "utf8" });
   expect(check.status).toBe(0);
 });

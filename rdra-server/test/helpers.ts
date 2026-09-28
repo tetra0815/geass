@@ -25,3 +25,10 @@ export async function makeRepo(files: Record<string, string> = {}): Promise<stri
   run(dir, "git", ["commit", "-q", "-m", "init"]);
   return dir;
 }
+
+export async function makeFeatureRepo(files: Record<string, string> = {}, id = "001-demo"): Promise<string> {
+  const dir = await makeRepo(files);
+  run(dir, "git", ["branch", "develop"]);
+  run(dir, "git", ["checkout", "-q", "-b", `feature/${id}`]);
+  return dir;
+}

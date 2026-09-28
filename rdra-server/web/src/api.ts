@@ -12,7 +12,7 @@ export interface AppState {
   model: Model;
   issues: Issue[];
   layout: Layout;
-  featureDir: string | null;
+  feature: string | null;
   review: ReviewRecord | null;
   approval: "none" | "pending" | "rejected" | "approved" | "stale";
 }

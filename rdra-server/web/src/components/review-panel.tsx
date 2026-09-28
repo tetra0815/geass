@@ -43,7 +43,7 @@ export function ReviewPanel(props: Props) {
       <h3>
         レビュー: <span className={`status status-${state.approval}`}>{STATUS_LABELS[state.approval]}</span>
       </h3>
-      {!state.featureDir && <p className="hint">feature の外で開いているため、承認・差し戻しはできません。</p>}
+      {!state.feature && <p className="hint">feature の外で開いているため、承認・差し戻しはできません。</p>}
 
       <h4>
         検証（エラー {errors.length} / 警告 {warnings.length}）

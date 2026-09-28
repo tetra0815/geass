@@ -1,15 +1,14 @@
-import { join } from "node:path";
+import { relative } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { diffAgainstBase } from "./base-diff.js";
-import { resolveFeatureDir } from "./feature.js";
-import { resolveBaseCommit } from "./git.js";
+import { resolveFeature } from "./feature.js";
 import { ModelParseError } from "./model/io.js";
 import { KIND_KEYS } from "./model/kinds.js";
 import { RELATION_KINDS } from "./model/relations.js";
 import type { Operation } from "./operations.js";
 import type { QueryIndex } from "./query.js";
-import { REVIEW_FILE, approvalState, readReview, requestReview, writeReview } from "./review.js";
+import { approvalState, readReview, requestReview, writeReview } from "./review.js";
 import type { RdraStore } from "./store.js";
 import { hasErrors, validate } from "./validate.js";
 import { SERVER_VERSION } from "./version.js";
@@ -19,7 +18,6 @@ export interface McpDeps {
   index: QueryIndex;
   reviewUrl: () => string | null;
   now?: () => string;
-  env?: NodeJS.ProcessEnv;
   onReviewChange?: () => void;
 }
 
@@ -37,7 +35,6 @@ const linkShape = z.object({
 export function createMcpServer(deps: McpDeps): McpServer {
   const { store, index } = deps;
   const now = deps.now ?? (() => new Date().toISOString());
-  const env = deps.env ?? process.env;
   const server = new McpServer({ name: "geass-rdra", version: SERVER_VERSION });
 
   const applyTool = async (ops: Operation[]): Promise<ToolResult> => {
@@ -143,9 +140,9 @@ export function createMcpServer(deps: McpDeps): McpServer {
       inputSchema: {},
     },
     async () => {
-      const featureDir = await resolveFeatureDir(store.repoRoot, env);
-      if (!featureDir) {
-        return fail("feature の外ではレビューを依頼できません。feature の worktree で実行するか、.geass/feature.json を設定してください");
+      const feature = await resolveFeature(store.repoRoot);
+      if (!feature) {
+        return fail("feature の外ではレビューを依頼できません。feature/* ブランチ（/feature-start で作った worktree）で実行してください");
       }
       if (store.parseError) return fail(`YAML にエラーがあります: ${store.parseError.message}`);
       const issues = validate(store.model);
@@ -156,15 +153,12 @@ export function createMcpServer(deps: McpDeps): McpServer {
       // Read-modify-write under the store lock so it cannot race a decision
       // arriving from the review UI.
       const record = await store.exclusive(async () => {
-        const next = requestReview(await readReview(featureDir), {
-          now: now(),
-          baseCommit: await resolveBaseCommit(store.repoRoot),
-        });
-        await writeReview(featureDir, next);
+        const next = requestReview(await readReview(feature.reviewFile), { now: now() });
+        await writeReview(feature.reviewFile, next);
         return next;
       });
       deps.onReviewChange?.();
-      return json({ status: record.status, url: deps.reviewUrl(), reviewFile: join(featureDir, REVIEW_FILE) });
+      return json({ status: record.status, url: deps.reviewUrl(), reviewFile: relative(store.repoRoot, feature.reviewFile) });
     },
   );
 
@@ -172,9 +166,9 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_review_status",
     { description: "レビューの状態（none / pending / approved / rejected）と、最後の判断のコメント。approval が stale なら承認後にモデルが変更されている。", inputSchema: {} },
     async () => {
-      const featureDir = await resolveFeatureDir(store.repoRoot, env);
-      if (!featureDir) return json({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note: "feature の外です" });
-      const record = await readReview(featureDir);
+      const feature = await resolveFeature(store.repoRoot);
+      if (!feature) return json({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note: "feature の外です" });
+      const record = await readReview(feature.reviewFile);
       return json({
         status: record.status,
         approval: approvalState(record, store.version).state,

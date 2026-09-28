@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { diffAgainstBase } from "./base-diff.js";
-import { resolveFeatureDir } from "./feature.js";
+import { resolveFeature } from "./feature.js";
 import { readLayout } from "./layout.js";
 import { ModelParseError } from "./model/io.js";
 import { isViewKey, type Positions } from "./model/view-keys.js";
@@ -18,7 +18,6 @@ export interface HttpDeps {
   store: RdraStore;
   reviewEvents: EventEmitter;
   webRoot: string | null;
-  env?: NodeJS.ProcessEnv;
   now?: () => string;
 }
 
@@ -75,7 +74,6 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 
 export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
   const { store, reviewEvents, webRoot } = deps;
-  const env = deps.env ?? process.env;
   const now = deps.now ?? (() => new Date().toISOString());
   const sockets = new Set<WebSocket>();
 
@@ -91,15 +89,15 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
   reviewEvents.on("review", onReview);
 
   async function state() {
-    const featureDir = await resolveFeatureDir(store.repoRoot, env);
-    const review = featureDir ? await readReview(featureDir) : null;
+    const feature = await resolveFeature(store.repoRoot);
+    const review = feature ? await readReview(feature.reviewFile) : null;
     return {
       version: store.version,
       parseError: store.parseError?.message ?? null,
       model: store.model,
       issues: validate(store.model),
       layout: await readLayout(store.repoRoot),
-      featureDir,
+      feature: feature?.id ?? null,
       review,
       approval: review ? approvalState(review, store.version).state : "none",
     };
@@ -132,16 +130,16 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
     const decision = body.decision;
     if (decision !== "approved" && decision !== "rejected") throw new HttpError(400, "decision は approved か rejected です");
     const comments = (Array.isArray(body.comments) ? body.comments : []) as ReviewComment[];
-    const featureDir = await resolveFeatureDir(store.repoRoot, env);
-    if (!featureDir) throw new HttpError(404, "feature の外ではレビューできません");
+    const feature = await resolveFeature(store.repoRoot);
+    if (!feature) throw new HttpError(404, "feature の外ではレビューできません");
     const record = await store.exclusive(async () => {
       if (body.version !== store.version) throw new HttpError(409, "レビュー中にモデルが変更されました。最新の状態を確認してください");
       if (decision === "approved" && (store.parseError || hasErrors(validate(store.model)))) {
         throw new HttpError(422, "エラーが残っているため承認できません");
       }
       try {
-        const next = decide(await readReview(featureDir), { decision, comments, hash: store.version, now: now() });
-        await writeReview(featureDir, next);
+        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: store.version, now: now() });
+        await writeReview(feature.reviewFile, next);
         return next;
       } catch (e) {
         if (e instanceof ReviewError) throw new HttpError(422, e.message);
