@@ -2,7 +2,7 @@ import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { REVIEWS_DIR, resolveFeature } from "../src/feature.js";
+import { REVIEWS_DIR, isInvalidFeature, resolveFeature } from "../src/feature.js";
 import { currentBranch, gitConfig, lastCommitTouching, readModelFilesAt, repoRootOf, resolveBaseCommit } from "../src/git.js";
 import { makeFeatureRepo, makeRepo, run, writeFiles } from "./helpers.js";
 
@@ -108,17 +108,31 @@ describe("resolveFeature", () => {
     const repo = await makeRepo();
     run(repo, "git", ["config", "gitflow.prefix.feature", "feat/"]);
     run(repo, "git", ["checkout", "-q", "-b", "feat/demo"]);
-    expect((await resolveFeature(repo))?.id).toBe("demo");
+    expect(await resolveFeature(repo)).toMatchObject({ id: "demo" });
   });
 
-  it("returns null outside a feature branch, for nested names and for detached HEAD", async () => {
+  it("returns null outside a feature branch and for detached HEAD", async () => {
     const repo = await makeRepo();
     expect(await resolveFeature(repo)).toBeNull();
     run(repo, "git", ["checkout", "-q", "-b", "hotfix/x"]);
     expect(await resolveFeature(repo)).toBeNull();
-    run(repo, "git", ["checkout", "-q", "-b", "feature/a/b"]);
+    run(repo, "git", ["checkout", "-q", "-b", "develop"]);
     expect(await resolveFeature(repo)).toBeNull();
     run(repo, "git", ["checkout", "-q", "--detach"]);
     expect(await resolveFeature(repo)).toBeNull();
+  });
+
+  it("reports a prefixed branch whose id is invalid instead of treating it as outside", async () => {
+    const repo = await makeRepo();
+    for (const branch of ["feature/a/b", "feature/_x"]) {
+      run(repo, "git", ["checkout", "-q", "-b", branch]);
+      const resolved = await resolveFeature(repo);
+      expect(resolved).toMatchObject({ invalid: true, branch });
+      expect(isInvalidFeature(resolved)).toBe(true);
+      expect(resolved && "reason" in resolved ? resolved.reason : "").toContain("feature/<id>");
+    }
+    run(repo, "git", ["checkout", "-q", "-b", "feat/team/42-x"]);
+    run(repo, "git", ["config", "gitflow.prefix.feature", "feat/"]);
+    expect(await resolveFeature(repo)).toMatchObject({ invalid: true, reason: expect.stringContaining("feat/<id>") });
   });
 });

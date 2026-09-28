@@ -6,7 +6,7 @@ import { modelHash } from "../src/model/hash.js";
 import { parseModel, readModelFiles } from "../src/model/io.js";
 import { runTrace } from "../src/trace-run.js";
 import { readMarker } from "../src/trace-state.js";
-import { makeFeatureRepo, makeRepo, run } from "./helpers.js";
+import { makeFeatureRepo, makeInvalidFeatureRepo, makeRepo, run } from "./helpers.js";
 import { PLAN, rdraFiles, tracedFeatureRepo } from "./trace-fixture.js";
 
 const T = "2026-09-28T10:00:00+09:00";
@@ -46,6 +46,10 @@ describe("runTrace", () => {
   it("reports why it cannot run", async () => {
     expect(await runTrace(await makeRepo(rdraFiles()), T)).toMatchObject({ status: "error", message: expect.stringContaining("feature") });
     expect(await runTrace(await makeFeatureRepo(rdraFiles()), T)).toMatchObject({ status: "error", message: expect.stringContaining("計画") });
+    expect(await runTrace(await makeInvalidFeatureRepo(rdraFiles()), T)).toMatchObject({
+      status: "error",
+      message: expect.stringContaining("feature/<id>"),
+    });
     const noBase = await makeRepo(rdraFiles());
     run(noBase, "git", ["checkout", "-q", "-b", "feature/x"]);
     expect(await runTrace(noBase, T)).toMatchObject({ status: "error", message: expect.stringContaining("基点") });

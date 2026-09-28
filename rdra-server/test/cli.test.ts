@@ -8,7 +8,7 @@ import { RDRA_DIR } from "../src/model/io.js";
 import { nodeVersionError } from "../src/node-version.js";
 import { decide, emptyReview, requestReview, writeReview } from "../src/review.js";
 import { sampleFiles, sampleModel } from "./fixtures.js";
-import { makeFeatureRepo, makeRepo, run } from "./helpers.js";
+import { makeFeatureRepo, makeInvalidFeatureRepo, makeRepo, run } from "./helpers.js";
 
 const rdraFiles = () => Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
 const T = "2026-09-25T10:00:00+09:00";
@@ -63,6 +63,11 @@ describe("check-approval", () => {
   it("exits 2 outside a feature branch", async () => {
     const repo = await makeRepo(rdraFiles());
     expect(await check(repo)).toMatchObject({ code: 2, result: { state: "outside" } });
+  });
+
+  it("exits 3 with an explanation on an invalid feature branch", async () => {
+    const repo = await makeInvalidFeatureRepo(rdraFiles());
+    expect(await check(repo)).toMatchObject({ code: 3, result: { state: "error", message: expect.stringContaining("feature/<id>") } });
   });
 
   it("exits 3 on YAML errors", async () => {
@@ -129,6 +134,12 @@ describe("wait-review", () => {
   it("exits 3 outside a feature branch", async () => {
     const c = capture();
     expect(await runCli(["wait-review", "--repo", await makeRepo()], c.io)).toBe(3);
+  });
+
+  it("exits 3 with an explanation on an invalid feature branch", async () => {
+    const c = capture();
+    expect(await runCli(["wait-review", "--repo", await makeInvalidFeatureRepo()], c.io)).toBe(3);
+    expect(JSON.parse(c.out.join(""))).toMatchObject({ state: "error", message: expect.stringContaining("feature/<id>") });
   });
 });
 

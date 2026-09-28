@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { APPROVAL_MESSAGES, checkFeatureApproval } from "./approval.js";
-import { resolveFeature } from "./feature.js";
+import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { gatePath, gateSkill } from "./gate.js";
 import { modelHash } from "./model/hash.js";
 import { ModelParseError, parseModel, readModelFiles } from "./model/io.js";
@@ -100,8 +100,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
   if (command === "check-approval" && repo) return checkApproval(repo, io);
   if (command === "wait-review" && repo) {
     const feature = await resolveFeature(repo);
-    if (!feature) {
-      io.out(JSON.stringify({ state: "error", message: APPROVAL_MESSAGES.outside }) + "\n");
+    if (!feature || isInvalidFeature(feature)) {
+      io.out(JSON.stringify({ state: "error", message: feature ? feature.reason : APPROVAL_MESSAGES.outside }) + "\n");
       return 3;
     }
     return waitReview(feature.reviewFile, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);

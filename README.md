@@ -45,7 +45,7 @@ Skills do not call each other; each one ends by telling you the next step.
 
 ## The gate
 
-A PreToolUse hook blocks, on `feature/*` branches:
+A PreToolUse hook blocks, on `feature/*` branches (a branch with the feature prefix but a further `/`, such as `feature/team/42-x`, is refused outright until renamed to `feature/<id>`):
 
 - `superpowers:writing-plans` until the feature's RDRA change is approved and unchanged since;
 - `superpowers:executing-plans` and `superpowers:subagent-driven-development` until, in addition, `/trace` has passed for the current model and plan (ticking checkboxes does not count as a change);

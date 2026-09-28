@@ -2,21 +2,27 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../src/cli.js";
-import { resolveFeature } from "../src/feature.js";
+import { isInvalidFeature, resolveFeature } from "../src/feature.js";
 import { gatePath, gateSkill } from "../src/gate.js";
 import { modelHash } from "../src/model/hash.js";
 import { RDRA_DIR, parseModel, readModelFiles } from "../src/model/io.js";
 import { decide, emptyReview, requestReview, writeReview } from "../src/review.js";
 import { runTrace } from "../src/trace-run.js";
-import { makeRepo, run } from "./helpers.js";
+import { makeInvalidFeatureRepo, makeRepo, run } from "./helpers.js";
 import { rdraFiles, tracedFeatureRepo } from "./trace-fixture.js";
 
 const T = "2026-09-28T10:00:00+09:00";
 
+async function reviewFile(repo: string) {
+  const feature = await resolveFeature(repo);
+  if (!feature || isInvalidFeature(feature)) throw new Error("not a feature branch");
+  return feature.reviewFile;
+}
+
 async function approve(repo: string) {
-  const feature = (await resolveFeature(repo))!;
+  const file = await reviewFile(repo);
   const hash = modelHash(parseModel(await readModelFiles(repo)));
-  await writeReview(feature.reviewFile, decide(requestReview(emptyReview(), { now: T }), { decision: "approved", comments: [], hash, now: T }));
+  await writeReview(file, decide(requestReview(emptyReview(), { now: T }), { decision: "approved", comments: [], hash, now: T }));
 }
 
 const reason = (d: { decision: string; reason?: string }) => (d.decision === "deny" ? d.reason : "");
@@ -56,6 +62,27 @@ describe("gateSkill", () => {
 
     await writeFile(plan, (await readFile(plan, "utf8")) + "\n### Task 3\nCovers: pr.audit\n");
     expect(reason(await gateSkill(repo, "superpowers:executing-plans"))).toContain("計画が変更されました");
+  });
+
+  it("denies while the review is pending or rejected", async () => {
+    const { repo } = await tracedFeatureRepo();
+    const pending = requestReview(emptyReview(), { now: T });
+    await writeReview(await reviewFile(repo), pending);
+    expect(reason(await gateSkill(repo, "superpowers:writing-plans"))).toContain("承認待ち");
+    const hash = modelHash(parseModel(await readModelFiles(repo)));
+    await writeReview(await reviewFile(repo), decide(pending, { decision: "rejected", comments: [{ target: "uc.place-order", text: "直して" }], hash, now: T }));
+    expect(reason(await gateSkill(repo, "superpowers:writing-plans"))).toContain("差し戻されています");
+    expect(reason(await gateSkill(repo, "superpowers:executing-plans"))).toContain("差し戻されています");
+  });
+
+  it("denies on a feature-prefixed branch whose id is invalid", async () => {
+    const repo = await makeInvalidFeatureRepo(rdraFiles());
+    for (const skill of ["superpowers:writing-plans", "superpowers:executing-plans", "subagent-driven-development"]) {
+      const why = reason(await gateSkill(repo, skill));
+      expect(why).toContain("feature/team/42-x");
+      expect(why).toContain("feature/<id>");
+    }
+    expect(await gateSkill(repo, "superpowers:brainstorming")).toEqual({ decision: "allow" });
   });
 
   it("denies when the model cannot be read", async () => {

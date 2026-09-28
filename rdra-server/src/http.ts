@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { diffAgainstBase } from "./base-diff.js";
-import { resolveFeature } from "./feature.js";
+import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { readLayout } from "./layout.js";
 import { ModelParseError } from "./model/io.js";
 import { isViewKey, type Positions } from "./model/view-keys.js";
@@ -89,7 +89,8 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
   reviewEvents.on("review", onReview);
 
   async function state() {
-    const feature = await resolveFeature(store.repoRoot);
+    const resolved = await resolveFeature(store.repoRoot);
+    const feature = isInvalidFeature(resolved) ? null : resolved;
     const review = feature ? await readReview(feature.reviewFile) : null;
     return {
       version: store.version,
@@ -132,6 +133,7 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
     const comments = (Array.isArray(body.comments) ? body.comments : []) as ReviewComment[];
     const feature = await resolveFeature(store.repoRoot);
     if (!feature) throw new HttpError(404, "feature の外ではレビューできません");
+    if (isInvalidFeature(feature)) throw new HttpError(404, `レビューできません: ${feature.reason}`);
     const record = await store.exclusive(async () => {
       if (body.version !== store.version) throw new HttpError(409, "レビュー中にモデルが変更されました。最新の状態を確認してください");
       if (decision === "approved" && (store.parseError || hasErrors(validate(store.model)))) {

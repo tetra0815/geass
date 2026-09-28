@@ -1,6 +1,6 @@
 import { relative } from "node:path";
 import { diffModels } from "./diff.js";
-import { resolveFeature } from "./feature.js";
+import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { lastCommitTouching, readModelFilesAt } from "./git.js";
 import { modelHash } from "./model/hash.js";
 import { ModelParseError, parseModel, readModelFiles } from "./model/io.js";
@@ -37,6 +37,7 @@ async function changedSinceApproval(repo: string, reviewFile: string, current: M
 export async function checkFeatureApproval(repo: string): Promise<ApprovalResult> {
   const feature = await resolveFeature(repo);
   if (!feature) return { state: "outside", message: APPROVAL_MESSAGES.outside };
+  if (isInvalidFeature(feature)) return { state: "error", message: feature.reason };
   let model: Model;
   try {
     model = parseModel(await readModelFiles(repo));

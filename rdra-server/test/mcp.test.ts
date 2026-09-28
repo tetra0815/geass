@@ -9,7 +9,7 @@ import { RDRA_DIR } from "../src/model/io.js";
 import { QueryIndex } from "../src/query.js";
 import { RdraStore } from "../src/store.js";
 import { sampleFiles } from "./fixtures.js";
-import { makeFeatureRepo, makeRepo } from "./helpers.js";
+import { makeFeatureRepo, makeInvalidFeatureRepo, makeRepo, run } from "./helpers.js";
 
 const rdraFiles = () => Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
 const cleanups: (() => void)[] = [];
@@ -114,6 +114,12 @@ describe("MCP tools", () => {
     const outside = await connect(await makeRepo(rdraFiles()));
     expect((await outside.call("rdra_request_review")).isError).toBe(true);
 
+    const invalid = await connect(await makeInvalidFeatureRepo(rdraFiles()));
+    const refused = await invalid.call("rdra_request_review");
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("feature/<id>");
+    expect((await invalid.call("rdra_review_status")).json().note).toContain("feature/<id>");
+
     const repo = await makeFeatureRepo({ ...rdraFiles(), [`${RDRA_DIR}/screens.yaml`]: "[]\n" });
     const inside = await connect(repo);
     const res = await inside.call("rdra_request_review");
@@ -132,6 +138,18 @@ describe("MCP tools", () => {
     expect(record.status).toBe("pending");
     expect(record).not.toHaveProperty("base_commit");
     expect((await call("rdra_review_status")).json()).toMatchObject({ status: "pending", approval: "pending", lastRound: null });
+  });
+
+  it("refuses to validate the feature or request a review when no diff base resolves", async () => {
+    const repo = await makeRepo(rdraFiles());
+    run(repo, "git", ["checkout", "-q", "-b", "feature/001-demo"]);
+    const { call } = await connect(repo);
+    for (const tool of ["rdra_validate", "rdra_request_review"]) {
+      const res = await call(tool);
+      expect(res.isError).toBe(true);
+      expect(res.text).toContain("差分の基点が見つかりません");
+    }
+    await expect(readFile(join(repo, REVIEWS_DIR, "001-demo.json"), "utf8")).rejects.toThrow();
   });
 
   it("refuses a review while a changed usecase has no acceptance criteria", async () => {

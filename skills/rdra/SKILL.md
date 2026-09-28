@@ -27,7 +27,7 @@ All model access goes through the geass plugin's `rdra` MCP server (in Claude Co
 |---|---|
 | `rdra_get_model` | Read the model (optionally one kind) |
 | `rdra_query` | Read-only SQL over the model, e.g. which must principles apply to a usecase (`principle_scope`), or all acceptance criteria (`acceptance`) |
-| `rdra_validate` | `issues` (errors block review, warnings are shown to the reviewer) and `featureIssues` (checks on this feature's changes; they block review) |
+| `rdra_validate` | `issues` (errors block review, warnings are shown to the reviewer) and `featureIssues` (checks on this feature's changes; they block review). On a feature branch whose diff base (develop, or `gitflow.branch.<branch>.base`) cannot be found it fails, and so does `rdra_request_review` |
 | `rdra_diff` | Element-level changes since the feature's git-flow base; usecases also list `acceptance` changes per criterion |
 | `rdra_upsert` / `rdra_delete` | Add or update elements (merge by id; `null` removes a field) / delete with cascade |
 | `rdra_link` / `rdra_unlink` | Add or remove relations |
@@ -60,7 +60,7 @@ Relations (`relation` for `rdra_link`), always written on the source element:
 
 ### Step 0: Check where you are
 
-Run `git branch --show-current`. On a `feature/*` branch (e.g. one `/feature-start` created) this run models that feature and ends with a review. On any other branch you can still read, edit and validate the model, but `rdra_request_review` refuses — tell the user so if they ask for a review.
+Run `git branch --show-current`. On a `feature/*` branch (e.g. one `/feature-start` created) this run models that feature and ends with a review. On any other branch you can still read, edit and validate the model, but `rdra_request_review` refuses — tell the user so if they ask for a review. A branch with the feature prefix but a further `/` in its name (e.g. `feature/team/42-x`) is not a usable feature: the review, `/trace` and the gate all refuse it until the branch is renamed to `feature/<id>` (`git branch -m`).
 
 ### Step 1: Take over an old constitution (once per project)
 

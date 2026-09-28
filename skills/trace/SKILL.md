@@ -27,7 +27,7 @@ It prints a summary and, on its last line, JSON with `required`, `covered`, `unc
   - `unknown`: `Covers:` references that are not in the model — usually a typo or a renamed criterion. Fix them.
   - `outOfScope` is only a warning (a task also touches something outside this feature's change, e.g. a regression test); mention it.
   Commit the plan and run the command again. Repeat until it exits 0.
-- **Exit 2** — it could not run (not a `feature/*` branch, no base branch, no committed plan, unreadable RDRA YAML). Report the message and what to do about it.
+- **Exit 2** — it could not run (not a `feature/*` branch, a feature branch with a further `/` in its name, no base branch, no committed plan, unreadable RDRA YAML). Report the message and what to do about it.
 
 If an uncovered item shows that the model itself is wrong (a criterion nobody wants), do not drop it from the check — the model has to change through `/rdra` and a new review.
 

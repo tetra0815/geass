@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { diffAgainstBase } from "./base-diff.js";
-import { resolveFeature } from "./feature.js";
+import { NO_BASE_MESSAGE, diffAgainstBase } from "./base-diff.js";
+import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { modelHash } from "./model/hash.js";
 import { ModelParseError, parseModel, readModelFiles } from "./model/io.js";
 import type { Model } from "./model/kinds.js";
@@ -15,6 +15,7 @@ export type TraceOutcome =
 export async function runTrace(repoRoot: string, now: string): Promise<TraceOutcome> {
   const feature = await resolveFeature(repoRoot);
   if (!feature) return { status: "error", message: "feature ブランチ（feature/*）の外では trace できません" };
+  if (isInvalidFeature(feature)) return { status: "error", message: feature.reason };
   let model: Model;
   let diff;
   try {
@@ -24,12 +25,7 @@ export async function runTrace(repoRoot: string, now: string): Promise<TraceOutc
     if (e instanceof ModelParseError) return { status: "error", message: `RDRA の YAML を読めません: ${e.message}` };
     throw e;
   }
-  if (!diff.base) {
-    return {
-      status: "error",
-      message: "差分の基点が見つかりません。develop ブランチ（または git config gitflow.branch.<branch>.base）を確認してください",
-    };
-  }
+  if (!diff.base) return { status: "error", message: NO_BASE_MESSAGE };
   const plans = await featurePlans(repoRoot, diff.base);
   if (plans.length === 0) {
     return {

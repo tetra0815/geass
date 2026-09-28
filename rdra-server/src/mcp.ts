@@ -1,8 +1,8 @@
 import { relative } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { diffAgainstBase } from "./base-diff.js";
-import { resolveFeature } from "./feature.js";
+import { NO_BASE_MESSAGE, diffAgainstBase } from "./base-diff.js";
+import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { ModelParseError } from "./model/io.js";
 import { KIND_KEYS } from "./model/kinds.js";
 import { RELATION_KINDS } from "./model/relations.js";
@@ -42,7 +42,15 @@ export function createMcpServer(deps: McpDeps): McpServer {
     return result.ok ? json(result) : fail(`${result.reason}: ${result.message}`);
   };
 
-  const featureIssues = async () => validateChanges((await diffAgainstBase(store.repoRoot, store.model)).changes);
+  /** Issues in this feature's change, or null on a feature branch whose diff base cannot be resolved. */
+  const featureIssues = async () => {
+    const diff = await diffAgainstBase(store.repoRoot, store.model);
+    if (!diff.base) {
+      const feature = await resolveFeature(store.repoRoot);
+      if (feature && !isInvalidFeature(feature)) return null;
+    }
+    return validateChanges(diff.changes);
+  };
 
   server.registerTool(
     "rdra_get_model",
@@ -82,7 +90,9 @@ export function createMcpServer(deps: McpDeps): McpServer {
     { description: "RDRA モデルの整合性チェック。issues の error と featureIssues（この feature の差分に対する検査）はレビュー依頼を妨げ、warning は妨げない。", inputSchema: {} },
     async () => {
       try {
-        return json({ parseError: store.parseError?.message ?? null, issues: validate(store.model), featureIssues: await featureIssues() });
+        const changeIssues = await featureIssues();
+        if (!changeIssues) return fail(`この feature の差分を検査できません: ${NO_BASE_MESSAGE}`);
+        return json({ parseError: store.parseError?.message ?? null, issues: validate(store.model), featureIssues: changeIssues });
       } catch (e) {
         if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
         throw e;
@@ -153,6 +163,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
       if (!feature) {
         return fail("feature の外ではレビューを依頼できません。feature/* ブランチ（/feature-start で作った worktree）で実行してください");
       }
+      if (isInvalidFeature(feature)) return fail(`レビューを依頼できません: ${feature.reason}`);
       if (store.parseError) return fail(`YAML にエラーがあります: ${store.parseError.message}`);
       const issues = validate(store.model);
       if (hasErrors(issues)) {
@@ -166,6 +177,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
         if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
         throw e;
       }
+      if (!blockers) return fail(`受け入れ条件を検査できないためレビューを依頼できません: ${NO_BASE_MESSAGE}`);
       if (blockers.length > 0) {
         return fail(`受け入れ条件が足りないためレビューを依頼できません:\n${blockers.map((i) => `- ${i.message}`).join("\n")}`);
       }
@@ -186,7 +198,10 @@ export function createMcpServer(deps: McpDeps): McpServer {
     { description: "レビューの状態（none / pending / approved / rejected）と、最後の判断のコメント。approval が stale なら承認後にモデルが変更されている。", inputSchema: {} },
     async () => {
       const feature = await resolveFeature(store.repoRoot);
-      if (!feature) return json({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note: "feature の外です" });
+      if (!feature || isInvalidFeature(feature)) {
+        const note = feature ? feature.reason : "feature の外です";
+        return json({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note });
+      }
       const record = await readReview(feature.reviewFile);
       return json({
         status: record.status,

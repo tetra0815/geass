@@ -3,6 +3,9 @@ import { readModelFilesAt, resolveBaseCommit } from "./git.js";
 import { parseModel } from "./model/io.js";
 import type { Model } from "./model/kinds.js";
 
+export const NO_BASE_MESSAGE =
+  "差分の基点が見つかりません。develop ブランチ（または git config gitflow.branch.<branch>.base）を確認してください";
+
 export interface BaseDiff {
   base: string | null;
   changes: ElementChange[];
