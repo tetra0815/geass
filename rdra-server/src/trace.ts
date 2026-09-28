@@ -52,17 +52,23 @@ export function knownRefs(model: Model): Set<string> {
 }
 
 const COVERS_LINE = /^\s*(?:[-*]\s+)?(?:\*\*)?Covers(?:\*\*)?:(?:\*\*)?\s*(.*)$/;
-const FENCE = /^\s*(```|~~~)/;
+const FENCE = /^\s*(`{3,}|~{3,})(.*)$/;
 
 export function parseCovers(markdown: string): string[] {
   const refs: string[] = [];
-  let inFence = false;
+  // The open fence, if any. As in CommonMark, only a run of the same
+  // character at least as long, with nothing after it, closes it.
+  let fence: string | null = null;
   for (const line of markdown.split(/\r?\n/)) {
-    if (FENCE.test(line)) {
-      inFence = !inFence;
+    const f = FENCE.exec(line);
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2].trim()) fence = null;
       continue;
     }
-    if (inFence) continue;
+    if (f && !(f[1][0] === "`" && f[2].includes("`"))) {
+      fence = f[1];
+      continue;
+    }
     const m = COVERS_LINE.exec(line);
     if (!m) continue;
     for (const token of m[1].split(/[\s,、]+/)) {

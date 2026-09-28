@@ -47,6 +47,9 @@ describe("featurePlans", () => {
 describe("plan hashes", () => {
   it("ignores checkbox state but not other edits", async () => {
     expect(normalizePlan("- [x] a\n  - [X] b\n* [ ] c\n[x] not a list")).toBe("- [ ] a\n  - [ ] b\n* [ ] c\n[x] not a list");
+    expect(normalizePlan("+ [x] a\n1. [x] b\n  12) [X] c\n1.[x] no space\n1x [x] not ordered")).toBe(
+      "+ [ ] a\n1. [ ] b\n  12) [ ] c\n1.[x] no space\n1x [x] not ordered",
+    );
     const repo = await makeFeatureRepo();
     const path = `${PLANS_DIR}/p.md`;
     await writeFiles(repo, { [path]: "- [ ] step\nCovers: pr.a\n" });

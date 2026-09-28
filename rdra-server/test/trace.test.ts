@@ -73,6 +73,32 @@ describe("parseCovers", () => {
     ].join("\n");
     expect(parseCovers(plan)).toEqual(["uc.place-order#ac1", "pr.audit", "uc.place-order#ac2", "uc.browse#ac1", "pr.pii"]);
   });
+
+  it("closes a fence only with the same character and at least the same length", () => {
+    const plan = [
+      "````markdown",
+      "```",
+      "Covers: uc.nested#ac1",
+      "```",
+      "Covers: uc.still-inside#ac1",
+      "````",
+      "Covers: pr.after-long",
+      "```",
+      "~~~",
+      "Covers: uc.tilde-inside-backtick#ac1",
+      "~~~",
+      "```text",
+      "Covers: uc.info-string-does-not-close#ac1",
+      "```",
+      "~~~~",
+      "Covers: uc.tilde#ac1",
+      "~~~",
+      "Covers: uc.short-tilde-does-not-close#ac1",
+      "~~~~~",
+      "Covers: pr.after-tilde",
+    ].join("\n");
+    expect(parseCovers(plan)).toEqual(["pr.after-long", "pr.after-tilde"]);
+  });
 });
 
 describe("matchTrace", () => {

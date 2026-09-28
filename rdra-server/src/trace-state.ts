@@ -25,7 +25,7 @@ export async function featurePlans(repoRoot: string, base: string): Promise<stri
 export function normalizePlan(text: string): string {
   // Executors tick checkboxes as they go; that is progress, not a change to
   // what the plan covers.
-  return text.replace(/^(\s*[-*]\s+)\[[xX]\]/gm, "$1[ ]");
+  return text.replace(/^(\s*(?:[-*+]|\d{1,9}[.)])\s+)\[[xX]\]/gm, "$1[ ]");
 }
 
 export async function planHashes(repoRoot: string, paths: string[]): Promise<Record<string, string>> {
