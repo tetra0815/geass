@@ -1,12 +1,11 @@
-import { relative } from "node:path";
+import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { diffModels } from "./diff.js";
+import { APPROVAL_MESSAGES, checkFeatureApproval } from "./approval.js";
 import { resolveFeature } from "./feature.js";
-import { lastCommitTouching, readModelFilesAt } from "./git.js";
+import { gatePath, gateSkill } from "./gate.js";
 import { modelHash } from "./model/hash.js";
 import { ModelParseError, parseModel, readModelFiles } from "./model/io.js";
-import type { Model } from "./model/kinds.js";
-import { approvalState, readReview, type ReviewRecord } from "./review.js";
+import { readReview, type ReviewRecord } from "./review.js";
 import { formatTrace, runTrace } from "./trace-run.js";
 
 export interface CliIo {
@@ -25,64 +24,19 @@ const USAGE = [
   "  cli.js check-approval --repo <root>",
   "  cli.js wait-review --repo <root> [--interval-ms 1000] [--timeout-sec 0]",
   "  cli.js trace --repo <root>",
+  "  cli.js gate --repo <root> (--skill <name> | --path <file>)",
   "  cli.js hash --repo <root>",
   "  cli.js serve --repo <root> [--port 0]",
   "",
 ].join("\n");
 
-const MESSAGES = {
-  none: "RDRA のレビューがまだ依頼されていません。/rdra でモデルを作成し、レビューを完了してください。",
-  pending: "RDRA のレビューが承認待ちです。レビュー画面で承認してください。",
-  rejected: "RDRA が差し戻されています。/rdra でコメントに対応し、再度レビューを依頼してください。",
-  stale: "承認後に RDRA が変更されました。/rdra で再レビューを受けてください。",
-  approved: "RDRA は承認済みです。",
-  outside: "feature ブランチ（feature/*）の外です。",
-} as const;
-
-async function loadModel(repo: string): Promise<Model> {
-  return parseModel(await readModelFiles(repo));
-}
-
-async function changedSinceApproval(repo: string, reviewFile: string, current: Model): Promise<string[] | undefined> {
-  const commit = await lastCommitTouching(repo, relative(repo, reviewFile));
-  if (!commit) return undefined;
-  try {
-    const approved = parseModel(await readModelFilesAt(repo, commit));
-    return diffModels(approved, current).map((c) => `${c.type} ${c.id}`);
-  } catch {
-    return undefined;
-  }
-}
-
 async function checkApproval(repo: string, io: CliIo): Promise<number> {
-  const feature = await resolveFeature(repo);
-  if (!feature) {
-    io.out(JSON.stringify({ state: "outside", message: MESSAGES.outside }) + "\n");
-    return 2;
-  }
-  let model: Model;
-  try {
-    model = await loadModel(repo);
-  } catch (e) {
-    if (!(e instanceof ModelParseError)) throw e;
-    io.out(JSON.stringify({ state: "error", message: `RDRA の YAML を読めません: ${e.message}` }) + "\n");
-    return 3;
-  }
-  let review;
-  try {
-    review = await readReview(feature.reviewFile);
-  } catch (e) {
-    io.out(JSON.stringify({ state: "error", message: `承認記録を読めません: ${(e as Error).message}` }) + "\n");
-    return 3;
-  }
-  const state = approvalState(review, modelHash(model));
-  const result: { state: string; message: string; changed?: string[] } = { state: state.state, message: MESSAGES[state.state] };
-  if (state.state === "stale") {
-    const changed = await changedSinceApproval(repo, feature.reviewFile, model);
-    if (changed) result.changed = changed;
-  }
-  io.out(JSON.stringify(result) + "\n");
-  return state.state === "approved" ? 0 : 1;
+  const { state, message, changed } = await checkFeatureApproval(repo);
+  io.out(JSON.stringify(changed ? { state, message, changed } : { state, message }) + "\n");
+  if (state === "approved") return 0;
+  if (state === "outside") return 2;
+  if (state === "error") return 3;
+  return 1;
 }
 
 async function safeRead(file: string): Promise<ReviewRecord | null> {
@@ -132,6 +86,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         "interval-ms": { type: "string" },
         "timeout-sec": { type: "string" },
         port: { type: "string" },
+        skill: { type: "string" },
+        path: { type: "string" },
       },
       strict: true,
     }) as { values: Record<string, string | undefined> });
@@ -145,7 +101,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
   if (command === "wait-review" && repo) {
     const feature = await resolveFeature(repo);
     if (!feature) {
-      io.out(JSON.stringify({ state: "error", message: MESSAGES.outside }) + "\n");
+      io.out(JSON.stringify({ state: "error", message: APPROVAL_MESSAGES.outside }) + "\n");
       return 3;
     }
     return waitReview(feature.reviewFile, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
@@ -157,13 +113,18 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     io.out(JSON.stringify(payload) + "\n");
     return outcome.status === "ok" ? 0 : outcome.status === "failed" ? 1 : 2;
   }
+  if (command === "gate" && repo && (values.skill || values.path)) {
+    const decision = values.path ? gatePath(resolve(repo, values.path)) : await gateSkill(repo, values.skill!);
+    io.out(JSON.stringify(decision) + "\n");
+    return decision.decision === "allow" ? 0 : 1;
+  }
   if (command === "serve" && repo) {
     const { serve } = await import("./serve.js");
     return serve(repo, Number(values.port ?? "0"), io);
   }
   if (command === "hash" && repo) {
     try {
-      io.out(modelHash(await loadModel(repo)) + "\n");
+      io.out(modelHash(parseModel(await readModelFiles(repo))) + "\n");
       return 0;
     } catch (e) {
       if (!(e instanceof ModelParseError)) throw e;
