@@ -29410,6 +29410,9 @@ function idSchema(prefix) {
 function common(prefix) {
   return { id: idSchema(prefix), name: external_exports.string().min(1), description: external_exports.string().optional() };
 }
+function acceptanceRef(usecaseId, acId) {
+  return `${usecaseId}#${acId}`;
+}
 function kindDef(key) {
   const def = KINDS.find((k) => k.key === key);
   if (!def) throw new Error(`unknown kind: ${key}`);
@@ -29420,7 +29423,7 @@ function kindOfId(id) {
   return KINDS.find((k) => k.prefix === prefix);
 }
 function emptyModel() {
-  return { actors: [], externalSystems: [], bucs: [], usecases: [], screens: [], events: [], information: [], states: [] };
+  return { actors: [], externalSystems: [], bucs: [], usecases: [], screens: [], events: [], information: [], states: [], principles: [] };
 }
 function findElement(model, id) {
   const kind = kindOfId(id);
@@ -29429,7 +29432,7 @@ function findElement(model, id) {
   const index = list.findIndex((e) => e.id === id);
   return index >= 0 ? { kind, element: list[index], index } : void 0;
 }
-var SLUG, slugPattern, KIND_KEYS, idList, AccessSchema, ActorSchema, ExternalSystemSchema, ScreenSchema, BucSchema, UsecaseSchema, EventSchema, InformationSchema, StateModelSchema, KINDS;
+var SLUG, slugPattern, KIND_KEYS, idList, AccessSchema, AcceptanceSchema, ActorSchema, ExternalSystemSchema, ScreenSchema, BucSchema, UsecaseSchema, EventSchema, InformationSchema, StateModelSchema, PRINCIPLE_CATEGORIES, PrincipleCategorySchema, PrincipleLevelSchema, PrincipleSchema, KINDS;
 var init_kinds = __esm({
   "src/model/kinds.ts"() {
     "use strict";
@@ -29444,10 +29447,17 @@ var init_kinds = __esm({
       "screens",
       "events",
       "information",
-      "states"
+      "states",
+      "principles"
     ];
     idList = () => external_exports.array(external_exports.string()).default(() => []);
     AccessSchema = external_exports.enum(["create", "read", "update", "delete"]);
+    AcceptanceSchema = external_exports.strictObject({
+      id: external_exports.string().regex(slugPattern, "\u53D7\u3051\u5165\u308C\u6761\u4EF6\u306E id \u306F\u30B9\u30E9\u30C3\u30B0\uFF08\u82F1\u5C0F\u6587\u5B57\u30FB\u6570\u5B57\u30FB\u30CF\u30A4\u30D5\u30F3\uFF09\u306B\u3057\u3066\u304F\u3060\u3055\u3044"),
+      given: external_exports.string().optional(),
+      when: external_exports.string(),
+      then: external_exports.string()
+    });
     ActorSchema = external_exports.strictObject({ ...common("act") });
     ExternalSystemSchema = external_exports.strictObject({ ...common("ext") });
     ScreenSchema = external_exports.strictObject({ ...common("scr") });
@@ -29463,7 +29473,8 @@ var init_kinds = __esm({
       screens: idList(),
       events: idList(),
       information: external_exports.array(external_exports.strictObject({ ref: external_exports.string(), access: AccessSchema })).default(() => []),
-      transitions: idList()
+      transitions: idList(),
+      acceptance: external_exports.array(AcceptanceSchema).default(() => [])
     });
     EventSchema = external_exports.strictObject({
       ...common("evt"),
@@ -29481,6 +29492,15 @@ var init_kinds = __esm({
       states: external_exports.array(external_exports.strictObject({ id: external_exports.string().regex(slugPattern, "\u72B6\u614B\u306E id \u306F\u30B9\u30E9\u30C3\u30B0\uFF08\u82F1\u5C0F\u6587\u5B57\u30FB\u6570\u5B57\u30FB\u30CF\u30A4\u30D5\u30F3\uFF09\u306B\u3057\u3066\u304F\u3060\u3055\u3044"), name: external_exports.string().min(1) })).default(() => []),
       transitions: external_exports.array(external_exports.strictObject({ from: external_exports.string(), to: external_exports.string() })).default(() => [])
     });
+    PRINCIPLE_CATEGORIES = ["business", "quality", "security", "engineering", "technology"];
+    PrincipleCategorySchema = external_exports.enum(PRINCIPLE_CATEGORIES);
+    PrincipleLevelSchema = external_exports.enum(["must", "should"]);
+    PrincipleSchema = external_exports.strictObject({
+      ...common("pr"),
+      category: PrincipleCategorySchema,
+      level: PrincipleLevelSchema,
+      scope: idList()
+    });
     KINDS = [
       { key: "actors", prefix: "act", file: "actors.yaml", table: "actors", label: "\u30A2\u30AF\u30BF\u30FC", schema: ActorSchema },
       { key: "externalSystems", prefix: "ext", file: "external-systems.yaml", table: "external_systems", label: "\u5916\u90E8\u30B7\u30B9\u30C6\u30E0", schema: ExternalSystemSchema },
@@ -29489,7 +29509,8 @@ var init_kinds = __esm({
       { key: "screens", prefix: "scr", file: "screens.yaml", table: "screens", label: "\u753B\u9762", schema: ScreenSchema },
       { key: "events", prefix: "evt", file: "events.yaml", table: "events", label: "\u30A4\u30D9\u30F3\u30C8", schema: EventSchema },
       { key: "information", prefix: "inf", file: "information.yaml", table: "information", label: "\u60C5\u5831", schema: InformationSchema },
-      { key: "states", prefix: "st", file: "states.yaml", table: "state_models", label: "\u72B6\u614B\u30E2\u30C7\u30EB", schema: StateModelSchema }
+      { key: "states", prefix: "st", file: "states.yaml", table: "state_models", label: "\u72B6\u614B\u30E2\u30C7\u30EB", schema: StateModelSchema },
+      { key: "principles", prefix: "pr", file: "principles.yaml", table: "principles", label: "\u539F\u5247", schema: PrincipleSchema }
     ];
   }
 });
@@ -29612,31 +29633,22 @@ async function currentBranch(repoRoot) {
   const r = await git(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
   return r.ok && r.stdout.trim() ? r.stdout.trim() : null;
 }
-async function rootWorktreeBranch(repoRoot) {
-  const r = await git(repoRoot, ["worktree", "list", "--porcelain"]);
-  if (!r.ok) return null;
-  for (const line of r.stdout.split("\n")) {
-    if (line.startsWith("branch refs/heads/")) return line.slice("branch refs/heads/".length);
-    if (line === "detached" || line === "") return null;
-  }
-  return null;
+async function gitConfig(repoRoot, key) {
+  const r = await git(repoRoot, ["config", "--get", key]);
+  const value = r.stdout.trim();
+  return r.ok && value ? value : null;
 }
-function baseCommitConfigKey(branch) {
-  return `branch.${branch}.geass-base-commit`;
+async function verifiedCommit(repoRoot, ref) {
+  return (await git(repoRoot, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).ok;
 }
 async function resolveBaseCommit(repoRoot) {
   const branch = await currentBranch(repoRoot);
-  if (branch) {
-    const configured = await git(repoRoot, ["config", "--get", baseCommitConfigKey(branch)]);
-    const value = configured.stdout.trim();
-    if (configured.ok && value) {
-      const verified = await git(repoRoot, ["rev-parse", "--verify", "--quiet", `${value}^{commit}`]);
-      if (verified.ok) return verified.stdout.trim();
-    }
-  }
-  const root = await rootWorktreeBranch(repoRoot);
-  if (root && root !== branch) {
-    const mb = await git(repoRoot, ["merge-base", "HEAD", root]);
+  if (!branch) return null;
+  const base = await gitConfig(repoRoot, `gitflow.branch.${branch}.base`) ?? await gitConfig(repoRoot, "gitflow.branch.develop") ?? "develop";
+  if (base === branch) return null;
+  for (const ref of [`refs/remotes/origin/${base}`, `refs/heads/${base}`]) {
+    if (!await verifiedCommit(repoRoot, ref)) continue;
+    const mb = await git(repoRoot, ["merge-base", "HEAD", ref]);
     if (mb.ok && mb.stdout.trim()) return mb.stdout.trim();
   }
   return null;
@@ -33379,6 +33391,24 @@ var init_hash = __esm({
 });
 
 // src/diff.ts
+function acceptanceChanges(before, after) {
+  const prev = new Map((before?.acceptance ?? []).map((a) => [a.id, a]));
+  const next = new Map((after?.acceptance ?? []).map((a) => [a.id, a]));
+  const out = [];
+  for (const id of [.../* @__PURE__ */ new Set([...prev.keys(), ...next.keys()])].sort()) {
+    const a = prev.get(id);
+    const b = next.get(id);
+    if (!a) out.push({ id, type: "added" });
+    else if (!b) out.push({ id, type: "removed" });
+    else if (JSON.stringify(canonicalize(a)) !== JSON.stringify(canonicalize(b))) out.push({ id, type: "modified" });
+  }
+  return out;
+}
+function withAcceptance(change) {
+  if (change.kind !== "usecases") return change;
+  const acceptance = acceptanceChanges(change.before, change.after);
+  return acceptance.length > 0 ? { ...change, acceptance } : change;
+}
 function diffModels(base, head) {
   const changes = [];
   for (const kind of KINDS) {
@@ -33387,16 +33417,16 @@ function diffModels(base, head) {
     for (const [id, next] of after) {
       const prev = before.get(id);
       if (!prev) {
-        changes.push({ id, kind: kind.key, type: "added", fields: [], after: next });
+        changes.push(withAcceptance({ id, kind: kind.key, type: "added", fields: [], after: next }));
         continue;
       }
       const a = canonicalize(prev);
       const b = canonicalize(next);
       const fields = [.../* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)])].filter((f) => JSON.stringify(a[f]) !== JSON.stringify(b[f])).sort();
-      if (fields.length > 0) changes.push({ id, kind: kind.key, type: "modified", fields, before: prev, after: next });
+      if (fields.length > 0) changes.push(withAcceptance({ id, kind: kind.key, type: "modified", fields, before: prev, after: next }));
     }
     for (const [id, prev] of before) {
-      if (!after.has(id)) changes.push({ id, kind: kind.key, type: "removed", fields: [], before: prev });
+      if (!after.has(id)) changes.push(withAcceptance({ id, kind: kind.key, type: "removed", fields: [], before: prev }));
     }
   }
   return changes;
@@ -33426,26 +33456,23 @@ var init_base_diff = __esm({
 });
 
 // src/feature.ts
-import { readFile as readFile2 } from "node:fs/promises";
-import { isAbsolute, join as join2 } from "node:path";
-async function resolveFeatureDir(repoRoot, env = process.env) {
-  const absolute = (p) => isAbsolute(p) ? p : join2(repoRoot, p);
-  if (env.SPECIFY_FEATURE_DIRECTORY) return absolute(env.SPECIFY_FEATURE_DIRECTORY);
-  try {
-    const data = JSON.parse(await readFile2(join2(repoRoot, ".geass", "feature.json"), "utf8"));
-    if (typeof data.feature_directory === "string" && data.feature_directory) return absolute(data.feature_directory);
-  } catch {
-  }
+import { join as join2 } from "node:path";
+async function resolveFeature(repoRoot) {
   const branch = await currentBranch(repoRoot);
-  if (branch && FEATURE_BRANCH.test(branch)) return join2(repoRoot, "specs", branch);
-  return null;
+  if (!branch) return null;
+  const prefix = await gitConfig(repoRoot, "gitflow.prefix.feature") ?? "feature/";
+  if (!branch.startsWith(prefix)) return null;
+  const id = branch.slice(prefix.length);
+  if (!FEATURE_ID.test(id)) return null;
+  return { id, branch, reviewFile: join2(repoRoot, REVIEWS_DIR, `${id}.json`) };
 }
-var FEATURE_BRANCH;
+var REVIEWS_DIR, FEATURE_ID;
 var init_feature = __esm({
   "src/feature.ts"() {
     "use strict";
     init_git();
-    FEATURE_BRANCH = /^(\d{8}-\d{6}-[a-z0-9-]+|\d{3}-[a-z0-9-]+)$/;
+    REVIEWS_DIR = "docs/rdra/reviews";
+    FEATURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
   }
 });
 
@@ -33471,7 +33498,7 @@ var init_view_keys = __esm({
 });
 
 // src/layout.ts
-import { mkdir as mkdir2, readFile as readFile3, writeFile as writeFile2 } from "node:fs/promises";
+import { mkdir as mkdir2, readFile as readFile2, writeFile as writeFile2 } from "node:fs/promises";
 import { join as join3 } from "node:path";
 function sanitize(data) {
   const out = {};
@@ -33486,7 +33513,7 @@ function sanitize(data) {
 }
 async function readView(repoRoot, view) {
   try {
-    return sanitize((0, import_yaml2.parse)(await readFile3(join3(repoRoot, LAYOUT_DIR, `${view}.yaml`), "utf8")));
+    return sanitize((0, import_yaml2.parse)(await readFile2(join3(repoRoot, LAYOUT_DIR, `${view}.yaml`), "utf8")));
   } catch {
     return {};
   }
@@ -33516,42 +33543,36 @@ var init_layout = __esm({
 
 // src/review.ts
 import { randomBytes } from "node:crypto";
-import { mkdir as mkdir3, readFile as readFile4, rename, rm, writeFile as writeFile3 } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { mkdir as mkdir3, readFile as readFile3, rename, rm, writeFile as writeFile3 } from "node:fs/promises";
+import { dirname } from "node:path";
 function emptyReview() {
-  return { status: "none", base_commit: null, approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
+  return { status: "none", approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
 }
-async function readReview(featureDir) {
+async function readReview(file2) {
   let text;
   try {
-    text = await readFile4(join4(featureDir, REVIEW_FILE), "utf8");
+    text = await readFile3(file2, "utf8");
   } catch (e) {
     if (e.code === "ENOENT") return emptyReview();
     throw e;
   }
-  return { ...emptyReview(), ...JSON.parse(text) };
+  const data = JSON.parse(text);
+  delete data.base_commit;
+  return { ...emptyReview(), ...data };
 }
-async function writeReview(featureDir, record2) {
-  await mkdir3(featureDir, { recursive: true });
-  const target = join4(featureDir, REVIEW_FILE);
-  const tmp = `${target}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
+async function writeReview(file2, record2) {
+  await mkdir3(dirname(file2), { recursive: true });
+  const tmp = `${file2}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
   try {
     await writeFile3(tmp, JSON.stringify(record2, null, 2) + "\n", "utf8");
-    await rename(tmp, target);
+    await rename(tmp, file2);
   } catch (e) {
     await rm(tmp, { force: true });
     throw e;
   }
 }
 function requestReview(record2, opts) {
-  return {
-    ...record2,
-    status: "pending",
-    base_commit: opts.baseCommit,
-    approved_hash: null,
-    requested_at: opts.now,
-    decided_at: null
-  };
+  return { ...record2, status: "pending", approved_hash: null, requested_at: opts.now, decided_at: null };
 }
 function decide(record2, opts) {
   if (record2.status !== "pending") throw new ReviewError("\u30EC\u30D3\u30E5\u30FC\u304C\u4F9D\u983C\u3055\u308C\u3066\u3044\u307E\u305B\u3093");
@@ -33570,11 +33591,10 @@ function approvalState(record2, currentHash) {
   if (record2.approved_hash === currentHash) return { state: "approved" };
   return { state: "stale", approvedHash: record2.approved_hash ?? "", currentHash };
 }
-var REVIEW_FILE, ReviewError;
+var ReviewError;
 var init_review = __esm({
   "src/review.ts"() {
     "use strict";
-    REVIEW_FILE = "rdra-review.json";
     ReviewError = class extends Error {
       constructor(message) {
         super(message);
@@ -33636,7 +33656,8 @@ var init_relations = __esm({
       "evt.source",
       "evt.target",
       "inf.related",
-      "st.information"
+      "st.information",
+      "pr.scope"
     ];
     RELATION_FIELDS = {
       "buc.actor": { field: "actors", shape: "ids" },
@@ -33649,7 +33670,8 @@ var init_relations = __esm({
       "evt.source": { field: "source", shape: "single" },
       "evt.target": { field: "target", shape: "single" },
       "inf.related": { field: "related", shape: "refs" },
-      "st.information": { field: "information", shape: "single" }
+      "st.information": { field: "information", shape: "single" },
+      "pr.scope": { field: "scope", shape: "ids" }
     };
     RELATION_TARGET_PREFIXES = {
       "buc.actor": ["act"],
@@ -33662,7 +33684,8 @@ var init_relations = __esm({
       "evt.source": ["act", "ext"],
       "evt.target": ["act", "ext"],
       "inf.related": ["inf"],
-      "st.information": ["inf"]
+      "st.information": ["inf"],
+      "pr.scope": ["act", "ext", "buc", "uc", "scr", "inf", "st"]
     };
     transitionPattern = new RegExp(`^(st\\.${SLUG}):(${SLUG})->(${SLUG})$`);
   }
@@ -33726,6 +33749,14 @@ function validate2(model) {
       warn("usecase-without-io", `${uc.id} \u306B\u753B\u9762\u3082\u30A4\u30D9\u30F3\u30C8\u3082\u7D10\u3065\u3044\u3066\u3044\u307E\u305B\u3093`, uc.id);
     }
     if (!inBuc.has(uc.id)) warn("usecase-without-buc", `${uc.id} \u304C\u3069\u306E BUC \u306B\u3082\u5C5E\u3057\u3066\u3044\u307E\u305B\u3093`, uc.id);
+    const acIds = /* @__PURE__ */ new Set();
+    for (const ac of uc.acceptance) {
+      if (acIds.has(ac.id)) error62("duplicate-acceptance", `${uc.id} \u306E\u53D7\u3051\u5165\u308C\u6761\u4EF6 ${ac.id} \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059`, uc.id);
+      acIds.add(ac.id);
+      if (!ac.when.trim() || !ac.then.trim()) {
+        error62("empty-acceptance", `${uc.id} \u306E\u53D7\u3051\u5165\u308C\u6761\u4EF6 ${ac.id} \u306E when / then \u304C\u7A7A\u3067\u3059`, uc.id);
+      }
+    }
   }
   for (const info of model.information) {
     if (!usedInformation.has(info.id)) warn("unused-information", `${info.id} \u3092\u6271\u3046\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u304C\u3042\u308A\u307E\u305B\u3093`, info.id);
@@ -33736,7 +33767,20 @@ function validate2(model) {
       if (!usedTransitions.has(ref)) warn("unused-transition", `${ref} \u3092\u8D77\u3053\u3059\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u304C\u3042\u308A\u307E\u305B\u3093`, sm.id);
     }
   }
+  for (const p of model.principles) {
+    if (p.level === "must" && !p.description?.trim()) {
+      warn("principle-without-description", `${p.id} \u306F MUST \u3067\u3059\u304C\u3001\u4F55\u3092\u6E80\u305F\u305B\u3070\u5B88\u3063\u305F\u3053\u3068\u306B\u306A\u308B\u304B\uFF08\u8AAC\u660E\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, p.id);
+    }
+  }
   return issues;
+}
+function validateChanges(changes) {
+  return changes.filter((c) => c.kind === "usecases" && c.type !== "removed" && c.after.acceptance.length === 0).map((c) => ({
+    level: "error",
+    code: "usecase-without-acceptance",
+    message: `${c.id} \u306B\u53D7\u3051\u5165\u308C\u6761\u4EF6\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u3053\u306E feature \u3067\u8FFD\u52A0\u30FB\u5909\u66F4\u3057\u305F\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u306B\u306F 1 \u4EF6\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059\uFF09`,
+    elementId: c.id
+  }));
 }
 var init_validate = __esm({
   "src/validate.ts"() {
@@ -33747,9 +33791,9 @@ var init_validate = __esm({
 });
 
 // src/http.ts
-import { readFile as readFile5 } from "node:fs/promises";
+import { readFile as readFile4 } from "node:fs/promises";
 import { createServer } from "node:http";
-import { extname, join as join5, normalize, sep } from "node:path";
+import { extname, join as join4, normalize, sep } from "node:path";
 function allowedHost(req) {
   return /^(127\.0\.0\.1|localhost):\d+$/.test(req.headers.host ?? "");
 }
@@ -33775,7 +33819,6 @@ async function readJson(req) {
 }
 async function startHttp(deps, port = 0) {
   const { store, reviewEvents, webRoot } = deps;
-  const env = deps.env ?? process.env;
   const now = deps.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
   const sockets = /* @__PURE__ */ new Set();
   const broadcast = (message) => {
@@ -33789,15 +33832,15 @@ async function startHttp(deps, port = 0) {
   store.on("layout", onLayout);
   reviewEvents.on("review", onReview);
   async function state() {
-    const featureDir = await resolveFeatureDir(store.repoRoot, env);
-    const review = featureDir ? await readReview(featureDir) : null;
+    const feature = await resolveFeature(store.repoRoot);
+    const review = feature ? await readReview(feature.reviewFile) : null;
     return {
       version: store.version,
       parseError: store.parseError?.message ?? null,
       model: store.model,
       issues: validate2(store.model),
       layout: await readLayout(store.repoRoot),
-      featureDir,
+      feature: feature?.id ?? null,
       review,
       approval: review ? approvalState(review, store.version).state : "none"
     };
@@ -33826,16 +33869,16 @@ async function startHttp(deps, port = 0) {
     const decision = body.decision;
     if (decision !== "approved" && decision !== "rejected") throw new HttpError(400, "decision \u306F approved \u304B rejected \u3067\u3059");
     const comments = Array.isArray(body.comments) ? body.comments : [];
-    const featureDir = await resolveFeatureDir(store.repoRoot, env);
-    if (!featureDir) throw new HttpError(404, "feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093");
+    const feature = await resolveFeature(store.repoRoot);
+    if (!feature) throw new HttpError(404, "feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093");
     const record2 = await store.exclusive(async () => {
       if (body.version !== store.version) throw new HttpError(409, "\u30EC\u30D3\u30E5\u30FC\u4E2D\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002\u6700\u65B0\u306E\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044");
       if (decision === "approved" && (store.parseError || hasErrors(validate2(store.model)))) {
         throw new HttpError(422, "\u30A8\u30E9\u30FC\u304C\u6B8B\u3063\u3066\u3044\u308B\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093");
       }
       try {
-        const next = decide(await readReview(featureDir), { decision, comments, hash: store.version, now: now() });
-        await writeReview(featureDir, next);
+        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: store.version, now: now() });
+        await writeReview(feature.reviewFile, next);
         return next;
       } catch (e) {
         if (e instanceof ReviewError) throw new HttpError(422, e.message);
@@ -33851,10 +33894,10 @@ async function startHttp(deps, port = 0) {
       return;
     }
     const root = normalize(webRoot);
-    const requested = normalize(join5(root, decodeURIComponent(pathname)));
-    const file2 = requested.startsWith(root + sep) && extname(requested) ? requested : join5(root, "index.html");
+    const requested = normalize(join4(root, decodeURIComponent(pathname)));
+    const file2 = requested.startsWith(root + sep) && extname(requested) ? requested : join4(root, "index.html");
     try {
-      const body = await readFile5(file2);
+      const body = await readFile4(file2);
       res.writeHead(200, { "content-type": CONTENT_TYPES[extname(file2)] ?? "application/octet-stream" }).end(body);
     } catch {
       if (file2.endsWith("index.html")) {
@@ -44629,49 +44672,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative, options, skipNormalization) {
+    function resolveComponent(base, relative2, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse4(serialize(base, options), options);
-        relative = parse4(serialize(relative, options), options);
+        relative2 = parse4(serialize(relative2, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative.scheme) {
-        target.scheme = relative.scheme;
-        target.userinfo = relative.userinfo;
-        target.host = relative.host;
-        target.port = relative.port;
-        target.path = removeDotSegments(relative.path || "");
-        target.query = relative.query;
+      if (!options.tolerant && relative2.scheme) {
+        target.scheme = relative2.scheme;
+        target.userinfo = relative2.userinfo;
+        target.host = relative2.host;
+        target.port = relative2.port;
+        target.path = removeDotSegments(relative2.path || "");
+        target.query = relative2.query;
       } else {
-        if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
-          target.userinfo = relative.userinfo;
-          target.host = relative.host;
-          target.port = relative.port;
-          target.path = removeDotSegments(relative.path || "");
-          target.query = relative.query;
+        if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
+          target.userinfo = relative2.userinfo;
+          target.host = relative2.host;
+          target.port = relative2.port;
+          target.path = removeDotSegments(relative2.path || "");
+          target.query = relative2.query;
         } else {
-          if (!relative.path) {
+          if (!relative2.path) {
             target.path = base.path;
-            if (relative.query !== void 0) {
-              target.query = relative.query;
+            if (relative2.query !== void 0) {
+              target.query = relative2.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative.path[0] === "/") {
-              target.path = removeDotSegments(relative.path);
+            if (relative2.path[0] === "/") {
+              target.path = removeDotSegments(relative2.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative.path;
+                target.path = "/" + relative2.path;
               } else if (!base.path) {
-                target.path = relative.path;
+                target.path = relative2.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative.query;
+            target.query = relative2.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -44679,7 +44722,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative.fragment;
+      target.fragment = relative2.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -49590,16 +49633,16 @@ var init_version = __esm({
 });
 
 // src/mcp.ts
-import { join as join6 } from "node:path";
+import { relative } from "node:path";
 function createMcpServer(deps) {
   const { store, index } = deps;
   const now = deps.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
-  const env = deps.env ?? process.env;
   const server = new McpServer({ name: "geass-rdra", version: SERVER_VERSION });
   const applyTool = async (ops) => {
     const result = await store.apply(ops);
     return result.ok ? json2(result) : fail(`${result.reason}: ${result.message}`);
   };
+  const featureIssues = async () => validateChanges((await diffAgainstBase(store.repoRoot, store.model)).changes);
   server.registerTool(
     "rdra_get_model",
     {
@@ -49618,7 +49661,7 @@ function createMcpServer(deps) {
   server.registerTool(
     "rdra_query",
     {
-      description: "RDRA \u30E2\u30C7\u30EB\u306B\u8AAD\u307F\u53D6\u308A\u5C02\u7528\u306E SQL \u3067\u554F\u3044\u5408\u308F\u305B\u308B\u3002\u30C6\u30FC\u30D6\u30EB: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref)\u3002\u7A2E\u5225\u3054\u3068\u306E\u30D3\u30E5\u30FC: actors, external_systems, bucs, usecases, screens, events, information, state_models\u3002",
+      description: "RDRA \u30E2\u30C7\u30EB\u306B\u8AAD\u307F\u53D6\u308A\u5C02\u7528\u306E SQL \u3067\u554F\u3044\u5408\u308F\u305B\u308B\u3002\u30C6\u30FC\u30D6\u30EB: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref), acceptance(usecase_id, ac_id, ref, given_text, when_text, then_text)\u3002\u30D3\u30E5\u30FC: principle_scope(principle_id, target_id)\u3001\u7A2E\u5225\u3054\u3068\u306E actors, external_systems, bucs, usecases, screens, events, information, state_models, principles\u3002",
       inputSchema: { sql: external_exports.string().min(1) }
     },
     async ({ sql }) => {
@@ -49632,8 +49675,15 @@ function createMcpServer(deps) {
   );
   server.registerTool(
     "rdra_validate",
-    { description: "RDRA \u30E2\u30C7\u30EB\u306E\u6574\u5408\u6027\u30C1\u30A7\u30C3\u30AF\u3002error \u306F\u30EC\u30D3\u30E5\u30FC\u4F9D\u983C\u3092\u59A8\u3052\u3001warning \u306F\u59A8\u3052\u306A\u3044\u3002", inputSchema: {} },
-    async () => json2({ parseError: store.parseError?.message ?? null, issues: validate2(store.model) })
+    { description: "RDRA \u30E2\u30C7\u30EB\u306E\u6574\u5408\u6027\u30C1\u30A7\u30C3\u30AF\u3002issues \u306E error \u3068 featureIssues\uFF08\u3053\u306E feature \u306E\u5DEE\u5206\u306B\u5BFE\u3059\u308B\u691C\u67FB\uFF09\u306F\u30EC\u30D3\u30E5\u30FC\u4F9D\u983C\u3092\u59A8\u3052\u3001warning \u306F\u59A8\u3052\u306A\u3044\u3002", inputSchema: {} },
+    async () => {
+      try {
+        return json2({ parseError: store.parseError?.message ?? null, issues: validate2(store.model), featureIssues: await featureIssues() });
+      } catch (e) {
+        if (e instanceof ModelParseError) return fail(`\u5206\u5C90\u70B9\u306E RDRA \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
+        throw e;
+      }
+    }
   );
   server.registerTool(
     "rdra_diff",
@@ -49652,7 +49702,7 @@ function createMcpServer(deps) {
   server.registerTool(
     "rdra_upsert",
     {
-      description: "\u8981\u7D20\u3092\u8FFD\u52A0\u307E\u305F\u306F\u66F4\u65B0\u3059\u308B\uFF08\u65E2\u5B58 ID \u306A\u3089\u6307\u5B9A\u3057\u305F\u30D5\u30A3\u30FC\u30EB\u30C9\u3060\u3051\u3092\u4E0A\u66F8\u304D\uFF09\u3002kind: actors, externalSystems, bucs, usecases, screens, events, information, states\u3002ID \u306F <\u63A5\u982D\u8F9E>.<\u30B9\u30E9\u30C3\u30B0>\uFF08act, ext, buc, uc, scr, evt, inf, st\uFF09\u3002",
+      description: "\u8981\u7D20\u3092\u8FFD\u52A0\u307E\u305F\u306F\u66F4\u65B0\u3059\u308B\uFF08\u65E2\u5B58 ID \u306A\u3089\u6307\u5B9A\u3057\u305F\u30D5\u30A3\u30FC\u30EB\u30C9\u3060\u3051\u3092\u4E0A\u66F8\u304D\uFF09\u3002kind: actors, externalSystems, bucs, usecases, screens, events, information, states, principles\u3002ID \u306F <\u63A5\u982D\u8F9E>.<\u30B9\u30E9\u30C3\u30B0>\uFF08act, ext, buc, uc, scr, evt, inf, st, pr\uFF09\u3002principles \u306F category\uFF08business/quality/security/engineering/technology\uFF09\u3068 level\uFF08must/should\uFF09\u304C\u5FC5\u9808\u3002usecases \u306E acceptance \u306F [{id, given?, when, then}]\u3002",
       inputSchema: {
         items: external_exports.array(external_exports.object({ kind: external_exports.enum(KIND_KEYS), element: external_exports.record(external_exports.string(), external_exports.unknown()) })).min(1)
       }
@@ -49667,7 +49717,7 @@ function createMcpServer(deps) {
   server.registerTool(
     "rdra_link",
     {
-      description: "\u95A2\u9023\u3092\u5F35\u308B\u3002relation \u306F\u8D77\u70B9\u306E\u7A2E\u5225\u3067\u6C7A\u307E\u308B\uFF08\u4F8B: uc.screen \u306F uc -> scr\uFF09\u3002uc.information \u306B\u306F attrs.access\uFF08create/read/update/delete\uFF09\u304C\u5FC5\u8981\u3002uc.transition \u306E to \u306F st.<\u30E2\u30C7\u30EB>:<\u72B6\u614B>-><\u72B6\u614B>\u3002inf.related \u306B\u306F\u4EFB\u610F\u3067 attrs.label\u3002",
+      description: "\u95A2\u9023\u3092\u5F35\u308B\u3002relation \u306F\u8D77\u70B9\u306E\u7A2E\u5225\u3067\u6C7A\u307E\u308B\uFF08\u4F8B: uc.screen \u306F uc -> scr\uFF09\u3002uc.information \u306B\u306F attrs.access\uFF08create/read/update/delete\uFF09\u304C\u5FC5\u8981\u3002uc.transition \u306E to \u306F st.<\u30E2\u30C7\u30EB>:<\u72B6\u614B>-><\u72B6\u614B>\u3002inf.related \u306B\u306F\u4EFB\u610F\u3067 attrs.label\u3002pr.scope \u306F pr -> act/ext/buc/uc/scr/inf/st\uFF08\u539F\u5247\u304C\u304B\u304B\u308B\u8981\u7D20\uFF09\u3002",
       inputSchema: {
         links: external_exports.array(linkShape.extend({ attrs: external_exports.record(external_exports.string(), external_exports.string()).optional() })).min(1)
       }
@@ -49686,9 +49736,9 @@ function createMcpServer(deps) {
       inputSchema: {}
     },
     async () => {
-      const featureDir = await resolveFeatureDir(store.repoRoot, env);
-      if (!featureDir) {
-        return fail("feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093\u3002feature \u306E worktree \u3067\u5B9F\u884C\u3059\u308B\u304B\u3001.geass/feature.json \u3092\u8A2D\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044");
+      const feature = await resolveFeature(store.repoRoot);
+      if (!feature) {
+        return fail("feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093\u3002feature/* \u30D6\u30E9\u30F3\u30C1\uFF08/feature-start \u3067\u4F5C\u3063\u305F worktree\uFF09\u3067\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044");
       }
       if (store.parseError) return fail(`YAML \u306B\u30A8\u30E9\u30FC\u304C\u3042\u308A\u307E\u3059: ${store.parseError.message}`);
       const issues = validate2(store.model);
@@ -49697,25 +49747,33 @@ function createMcpServer(deps) {
         return fail(`\u30A8\u30E9\u30FC\u3092\u89E3\u6D88\u3057\u3066\u304B\u3089\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3057\u3066\u304F\u3060\u3055\u3044:
 ${errors.join("\n")}`);
       }
+      let blockers;
+      try {
+        blockers = await featureIssues();
+      } catch (e) {
+        if (e instanceof ModelParseError) return fail(`\u5206\u5C90\u70B9\u306E RDRA \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
+        throw e;
+      }
+      if (blockers.length > 0) {
+        return fail(`\u53D7\u3051\u5165\u308C\u6761\u4EF6\u304C\u8DB3\u308A\u306A\u3044\u305F\u3081\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093:
+${blockers.map((i) => `- ${i.message}`).join("\n")}`);
+      }
       const record2 = await store.exclusive(async () => {
-        const next = requestReview(await readReview(featureDir), {
-          now: now(),
-          baseCommit: await resolveBaseCommit(store.repoRoot)
-        });
-        await writeReview(featureDir, next);
+        const next = requestReview(await readReview(feature.reviewFile), { now: now() });
+        await writeReview(feature.reviewFile, next);
         return next;
       });
       deps.onReviewChange?.();
-      return json2({ status: record2.status, url: deps.reviewUrl(), reviewFile: join6(featureDir, REVIEW_FILE) });
+      return json2({ status: record2.status, url: deps.reviewUrl(), reviewFile: relative(store.repoRoot, feature.reviewFile) });
     }
   );
   server.registerTool(
     "rdra_review_status",
     { description: "\u30EC\u30D3\u30E5\u30FC\u306E\u72B6\u614B\uFF08none / pending / approved / rejected\uFF09\u3068\u3001\u6700\u5F8C\u306E\u5224\u65AD\u306E\u30B3\u30E1\u30F3\u30C8\u3002approval \u304C stale \u306A\u3089\u627F\u8A8D\u5F8C\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u3066\u3044\u308B\u3002", inputSchema: {} },
     async () => {
-      const featureDir = await resolveFeatureDir(store.repoRoot, env);
-      if (!featureDir) return json2({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note: "feature \u306E\u5916\u3067\u3059" });
-      const record2 = await readReview(featureDir);
+      const feature = await resolveFeature(store.repoRoot);
+      if (!feature) return json2({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note: "feature \u306E\u5916\u3067\u3059" });
+      const record2 = await readReview(feature.reviewFile);
       return json2({
         status: record2.status,
         approval: approvalState(record2, store.version).state,
@@ -49734,7 +49792,6 @@ var init_mcp2 = __esm({
     init_zod();
     init_base_diff();
     init_feature();
-    init_git();
     init_io();
     init_kinds();
     init_relations();
@@ -49771,6 +49828,8 @@ var init_query = __esm({
       CREATE TABLE relations (from_id TEXT NOT NULL, to_id TEXT NOT NULL, kind TEXT NOT NULL, attrs TEXT NOT NULL);
       CREATE TABLE state_nodes (model_id TEXT NOT NULL, state_id TEXT NOT NULL, name TEXT NOT NULL);
       CREATE TABLE state_transitions (model_id TEXT NOT NULL, from_state TEXT NOT NULL, to_state TEXT NOT NULL, ref TEXT NOT NULL);
+      CREATE TABLE acceptance (usecase_id TEXT NOT NULL, ac_id TEXT NOT NULL, ref TEXT NOT NULL, given_text TEXT, when_text TEXT NOT NULL, then_text TEXT NOT NULL);
+      CREATE VIEW principle_scope AS SELECT from_id AS principle_id, to_id AS target_id FROM relations WHERE kind = 'pr.scope';
       ${KINDS.map((k) => `CREATE VIEW ${k.table} AS SELECT * FROM elements WHERE kind = '${k.key}';`).join("\n")}
     `);
       }
@@ -49778,7 +49837,7 @@ var init_query = __esm({
         this.db.exec("PRAGMA query_only = OFF");
         this.db.exec("BEGIN");
         try {
-          this.db.exec("DELETE FROM elements; DELETE FROM relations; DELETE FROM state_nodes; DELETE FROM state_transitions;");
+          this.db.exec("DELETE FROM elements; DELETE FROM relations; DELETE FROM state_nodes; DELETE FROM state_transitions; DELETE FROM acceptance;");
           const insertElement = this.db.prepare("INSERT INTO elements VALUES (?, ?, ?, ?, ?)");
           for (const kind of KINDS) {
             for (const e of model[kind.key]) {
@@ -49794,6 +49853,10 @@ var init_query = __esm({
             for (const t of sm.transitions) {
               insertTransition.run(sm.id, t.from, t.to, formatTransitionRef({ model: sm.id, from: t.from, to: t.to }));
             }
+          }
+          const insertAcceptance = this.db.prepare("INSERT INTO acceptance VALUES (?, ?, ?, ?, ?, ?)");
+          for (const uc of model.usecases) {
+            for (const ac of uc.acceptance) insertAcceptance.run(uc.id, ac.id, acceptanceRef(uc.id, ac.id), ac.given ?? null, ac.when, ac.then);
           }
           this.db.exec("COMMIT");
         } catch (e) {
@@ -49933,7 +49996,7 @@ var init_operations = __esm({
 // src/store.ts
 import { EventEmitter } from "node:events";
 import { existsSync, watch } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join5 } from "node:path";
 var issueKey, RdraStore;
 var init_store = __esm({
   "src/store.ts"() {
@@ -50003,7 +50066,7 @@ var init_store = __esm({
       }
       startWatcher() {
         if (!this.watching || this.watcher) return;
-        const dir = join7(this.repoRoot, RDRA_DIR);
+        const dir = join5(this.repoRoot, RDRA_DIR);
         if (!existsSync(dir)) return;
         this.watcher = watch(dir, () => this.scheduleReload());
       }
@@ -50087,10 +50150,10 @@ __export(server_exports, {
   startServer: () => startServer
 });
 import { EventEmitter as EventEmitter2 } from "node:events";
-import { dirname, join as join8 } from "node:path";
+import { dirname as dirname2, join as join6 } from "node:path";
 import { fileURLToPath } from "node:url";
 function bundledWebRoot() {
-  return join8(dirname(fileURLToPath(import.meta.url)), "web");
+  return join6(dirname2(fileURLToPath(import.meta.url)), "web");
 }
 async function startServer() {
   const cwd = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
