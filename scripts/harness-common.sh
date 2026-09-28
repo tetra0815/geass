@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Shared helpers for the geass worktree harness (create-feature-worktree.sh /
-# create-hotfix-worktree.sh). Deliberately independent of spec-kit's own
-# .specify/scripts/bash/common.sh: geass only relies on spec-kit's documented
-# SPECIFY_FEATURE_DIRECTORY override (via speckit-specify's own SKILL.md),
-# never on spec-kit's internal scripts, so spec-kit upgrades can't break it.
+# Shared helpers for scripts/start-worktree.sh: locating the root worktree,
+# reading .geass/init-options.json and git-flow settings, and opening a new
+# claude session in a terminal tab.
 
 # Resolve the root (main) git worktree's absolute path, via `git worktree
 # list`, which always lists the main worktree first regardless of which
@@ -47,34 +45,11 @@ print(v if v else '')
     return 0
 }
 
-# Succeed when require_rdra_approval is true in .geass/init-options.json.
-# read_init_option prints jq's "true" or Python's "True" depending on which
-# parser it fell through to, so accept both.
-rdra_approval_required() {
-    local val
-    val=$(read_init_option "$1" "require_rdra_approval")
-    [[ "$val" == "true" || "$val" == "True" ]]
-}
-
-# Print the skill a new feature session starts with: /rdra when RDRA
-# approval is required, otherwise /design-spec.
-feature_handoff_command() {
-    if rdra_approval_required "$1"; then
-        printf '%s' "/rdra"
-    else
-        printf '%s' "/design-spec"
-    fi
-}
-
-# Record the commit a feature branch was cut from, so rdra-server can diff
-# the RDRA model against it. Stored in git config (shared by every worktree)
-# rather than .geass/feature.json, which _persist_feature_json rewrites with
-# feature_directory only.
-record_base_commit() {
-    local repo_root="$1"
-    local branch="$2"
-    local commit="$3"
-    git -C "$repo_root" config "branch.$branch.geass-base-commit" "$commit"
+# Print git config gitflow.<key>, or <default> when it is unset.
+git_flow_config() {
+    local value
+    value=$(git config "gitflow.$1" 2>/dev/null) || value=''
+    printf '%s' "${value:-$2}"
 }
 
 # Return the configured terminal multiplexer ("wezterm" or "tmux"),
@@ -118,91 +93,6 @@ check_terminal_multiplexer() {
     esac
 }
 
-# Return the configured git-flow release branch prefix, defaulting to
-# "release/" (mirrors hooks/pretooluse_gate.py's git_flow_release_prefix).
-git_flow_release_prefix() {
-    local prefix
-    prefix=$(git config gitflow.prefix.release 2>/dev/null)
-    printf '%s' "${prefix:-release/}"
-}
-
-# Return the configured git-flow master branch name, defaulting to "main"
-# (mirrors hooks/pretooluse_gate.py's git_flow_master_branch).
-git_flow_master_branch() {
-    local branch
-    branch=$(git config gitflow.branch.master 2>/dev/null)
-    printf '%s' "${branch:-main}"
-}
-
-# Defense in depth alongside hooks/pretooluse_gate.py's own PreToolUse
-# precondition check: verify the root worktree (must already be the cwd) is
-# actually checked out on one of the expected branches right before this
-# harness branches off of it, and print that branch name. Each argument is
-# either an exact branch name, or a prefix ending in "/" to match as a
-# prefix; the branch passes if it matches ANY argument (feature-start passes
-# one pattern, fix-start passes two -- the master branch and the release
-# prefix -- since it may legitimately run from either).
-#
-# feature-start and fix-start have each been silently observed branching
-# off the wrong base despite the PreToolUse gate supposedly covering this --
-# whatever the exact cause (a swallowed/misrouted hook invocation, a race,
-# etc.), this check makes that failure mode loud and diagnosable right here
-# instead of silently producing a branch/worktree based on the wrong commit.
-require_root_branch() {
-    local branch
-    branch=$(git symbolic-ref --quiet --short HEAD) || {
-        echo "Error: root worktree is in a detached HEAD state; expected one of: $*" >&2
-        return 1
-    }
-    local expected
-    for expected in "$@"; do
-        case "$expected" in
-            */)
-                case "$branch" in
-                    "$expected"*)
-                        printf '%s' "$branch"
-                        return 0
-                        ;;
-                esac
-                ;;
-            *)
-                if [[ "$branch" == "$expected" ]]; then
-                    printf '%s' "$branch"
-                    return 0
-                fi
-                ;;
-        esac
-    done
-    if [[ $# -eq 1 ]]; then
-        case "$1" in
-            */)
-                echo "Error: root worktree is on '$branch', expected a '${1}*' branch. Run \`git flow release start <version>\` (or \`git checkout\` to the right branch) in the root worktree first." >&2
-                ;;
-            *)
-                echo "Error: root worktree is on '$branch', expected '$1'. Run \`git checkout $1\` in the root worktree first." >&2
-                ;;
-        esac
-    else
-        echo "Error: root worktree is on '$branch', expected one of: $* (exact branch names or 'prefix/' patterns). Run \`git checkout\` to one of them in the root worktree first." >&2
-    fi
-    return 1
-}
-
-# Pull the root worktree's current branch (must already be the cwd) before
-# branching off of it, so the new feature/hotfix branch is based on the
-# latest remote state instead of whatever was last fetched locally. No-op
-# if the current branch has no upstream configured (e.g. no remote, or an
-# unpushed local-only branch). Uses --ff-only so a diverged local branch
-# fails loudly here rather than silently branching off stale history.
-pull_root_branch() {
-    if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-        git pull --ff-only || {
-            echo "Error: failed to pull the root worktree's branch (see git output above)" >&2
-            return 1
-        }
-    fi
-}
-
 # Spawn `claude <prompt>` in a new tab/window at $worktree_path, using the
 # terminal multiplexer configured via terminal_multiplexer in
 # .geass/init-options.json (defaults to "wezterm"). Call
@@ -229,36 +119,4 @@ spawn_claude_tab() {
             tmux new-window -c "$worktree_path" -- env CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 claude "$prompt" >/dev/null
             ;;
     esac
-}
-
-# Sanitize free text into a filesystem/branch-safe lowercase slug (letters,
-# digits, single hyphens). Non-ASCII text (e.g. a Japanese feature
-# description) has nothing left after this and collapses to an empty
-# string -- callers should pass an already-English slug (see the callers'
-# --slug flag) rather than relying on this to translate.
-slugify() {
-    local text="$1"
-    printf '%s' "$text" \
-        | tr '[:upper:]' '[:lower:]' \
-        | sed 's/[^a-z0-9]/-/g' \
-        | tr -s '-' \
-        | sed 's/^-//' \
-        | sed 's/-$//' \
-        | cut -d'-' -f1-6
-}
-
-# Generate a filesystem/branch-safe "<timestamp>-<slug>" name from free text.
-# Independent of spec-kit's create-new-feature.sh: the result is passed
-# forward as SPECIFY_FEATURE_DIRECTORY, so it never needs to match spec-kit's
-# own internal naming algorithm exactly.
-generate_slug_name() {
-    local description="$1"
-    local timestamp
-    timestamp=$(date +%Y%m%d-%H%M%S)
-
-    local slug
-    slug="$(slugify "$description")"
-    slug="${slug:-feature}"
-
-    printf '%s-%s' "$timestamp" "$slug"
 }
