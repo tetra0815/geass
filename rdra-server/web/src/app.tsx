@@ -7,6 +7,7 @@ import { autoLayout, type LayoutResult } from "./auto-layout.js";
 import { DiagramCanvas, type Selection } from "./components/diagram-canvas.js";
 import { Inspector } from "./components/inspector.js";
 import { Palette } from "./components/palette.js";
+import { PrinciplesTable } from "./components/principles-table.js";
 import { ReviewPanel } from "./components/review-panel.js";
 import { inferLink, inferTransition } from "./infer.js";
 import { projectView, viewForId } from "./views.js";
@@ -15,6 +16,8 @@ export function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [diff, setDiff] = useState<DiffState | null>(null);
   const [view, setView] = useState<ViewKey>("usecase-composite");
+  const [page, setPage] = useState<"diagram" | "principles">("diagram");
+  const [focus, setFocus] = useState<string | null>(null);
   const [diffMode, setDiffMode] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
   const [layout, setLayout] = useState<{ view: ViewKey; result: LayoutResult } | null>(null);
@@ -114,8 +117,19 @@ export function App() {
   };
 
   const jump = (id: string) => {
+    if (id.startsWith("pr.")) {
+      setPage("principles");
+      setFocus(id);
+      return;
+    }
+    setPage("diagram");
     setView(viewForId(id));
     setSelection({ type: "node", id });
+  };
+
+  const openPrinciples = (id: string) => {
+    setPage("principles");
+    setFocus(id);
   };
 
   if (!state) return <div className="loading">読み込み中…</div>;
@@ -127,10 +141,20 @@ export function App() {
         <h1>RDRA レビュー</h1>
         <nav>
           {VIEW_KEYS.map((v) => (
-            <button key={v} className={v === view ? "active" : ""} onClick={() => setView(v)}>
+            <button
+              key={v}
+              className={page === "diagram" && v === view ? "active" : ""}
+              onClick={() => {
+                setPage("diagram");
+                setView(v);
+              }}
+            >
               {VIEW_LABELS[v]}
             </button>
           ))}
+          <button className={page === "principles" ? "active" : ""} onClick={() => openPrinciples("")}>
+            原則
+          </button>
         </nav>
         <label className="check" title={diff?.base ? `基準: ${diff.base.slice(0, 8)}` : "比較対象の分岐点がありません"}>
           <input type="checkbox" checked={diffMode} disabled={!diff?.base} onChange={(e) => setDiffMode(e.target.checked)} />
@@ -143,23 +167,37 @@ export function App() {
         </div>
       )}
       <main>
-        <div className="canvas">
-          <Palette disabled={readOnly} onApply={apply} />
-          {layout?.view === view ? (
-            <DiagramCanvas
-              key={view}
-              diagram={diagram}
-              layout={layout.result}
-              selection={selection}
-              readOnly={readOnly}
-              onSelect={setSelection}
-              onConnect={connect}
-              onMoved={moved}
+        {page === "principles" ? (
+          <div className="canvas">
+            <PrinciplesTable
+              model={state.model}
+              changes={diffMode && diff ? diff.changes : []}
+              focus={focus || null}
+              disabled={readOnly}
+              onApply={apply}
+              onJump={jump}
+              onComment={setCommentTarget}
             />
-          ) : (
-            <div className="loading">配置を計算中…</div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="canvas">
+            <Palette disabled={readOnly} onApply={apply} />
+            {layout?.view === view ? (
+              <DiagramCanvas
+                key={view}
+                diagram={diagram}
+                layout={layout.result}
+                selection={selection}
+                readOnly={readOnly}
+                onSelect={setSelection}
+                onConnect={connect}
+                onMoved={moved}
+              />
+            ) : (
+              <div className="loading">配置を計算中…</div>
+            )}
+          </div>
+        )}
         <aside>
           <Inspector
             model={state.model}
