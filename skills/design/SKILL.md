@@ -68,11 +68,11 @@ For every RDRA element this feature added or changed:
 
 ### Step 0: Check where you are
 
-Run `git branch --show-current`. On a `feature/*` branch this run designs that feature and ends with a review. On any other branch you can still read, edit and validate the model, but `rdra_request_review` refuses — tell the user so if they ask for a review.
+Run `git branch --show-current`. On a `feature/*` branch this run designs that feature and ends with a review. On any other branch you can still read, edit and validate the model, but `rdra_request_review` refuses — tell the user so if they ask for a review. Off a feature branch, skip Step 1 and Step 7's commit-and-hand-off and go to Step 3; never call `rdra_request_review`.
 
 ### Step 1: Check the stages
 
-Call `rdra_review_status`.
+On a feature branch, call `rdra_review_status`.
 
 - RDRA `approval` is not `approved`: the design starts from an approved RDRA change. Tell the user to finish `/rdra` first and stop.
 - `design.status` is `rejected`: the reviewer's comments in `design.lastRound.comments` are the work for this run. Go to Step 4 and address every comment first.
