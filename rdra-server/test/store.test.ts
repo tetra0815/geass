@@ -32,6 +32,7 @@ describe("RdraStore", () => {
     const repo = await makeRepo({ ...rdraFiles(), [`${DESIGN_DIR}/components.yaml`]: "[]\n" });
     const store = await openStore(repo);
     store.watch();
+    await new Promise((r) => setTimeout(r, 200));
     const changed = nextChange(store);
     await writeFile(join(repo, DESIGN_DIR, "components.yaml"), "- id: comp.db\n  name: DB\n  type: datastore\n");
     await changed;
