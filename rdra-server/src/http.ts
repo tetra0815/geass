@@ -5,8 +5,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
+import { designRequired } from "./approval.js";
 import { diffAgainstBase } from "./base-diff.js";
-import { isInvalidFeature, resolveFeature } from "./feature.js";
+import { isInvalidFeature, resolveFeature, stageReviewFile } from "./feature.js";
 import { readLayout } from "./layout.js";
 import { rdraHash } from "./model/hash.js";
 import { ModelParseError } from "./model/io.js";
@@ -90,10 +91,21 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
   store.on("layout", onLayout);
   reviewEvents.on("review", onReview);
 
+  async function designRequiredNow(): Promise<boolean> {
+    try {
+      const diff = await diffAgainstBase(store.repoRoot, store.model);
+      return diff.base ? designRequired(store.model, diff.changes) : true;
+    } catch (e) {
+      if (e instanceof ModelParseError) return true;
+      throw e;
+    }
+  }
+
   async function state() {
     const resolved = await resolveFeature(store.repoRoot);
     const feature = isInvalidFeature(resolved) ? null : resolved;
     const review = feature ? await readReview(feature.reviewFile) : null;
+    const designReview = feature ? await readReview(feature.designReviewFile) : null;
     return {
       version: store.version,
       parseError: store.parseError?.message ?? null,
@@ -103,6 +115,11 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
       feature: feature?.id ?? null,
       review,
       approval: review ? approvalState(review, rdraHash(store.model)).state : "none",
+      design: {
+        review: designReview,
+        approval: designReview ? approvalState(designReview, store.version).state : "none",
+        required: feature ? await designRequiredNow() : false,
+      },
     };
   }
 
@@ -133,6 +150,8 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
     const decision = body.decision;
     if (decision !== "approved" && decision !== "rejected") throw new HttpError(400, "decision は approved か rejected です");
     const comments = (Array.isArray(body.comments) ? body.comments : []) as ReviewComment[];
+    const stage = body.stage ?? "rdra";
+    if (stage !== "rdra" && stage !== "design") throw new HttpError(400, "stage は rdra か design です");
     const feature = await resolveFeature(store.repoRoot);
     if (!feature) throw new HttpError(404, "feature の外ではレビューできません");
     if (isInvalidFeature(feature)) throw new HttpError(404, `レビューできません: ${feature.reason}`);
@@ -142,8 +161,13 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
         throw new HttpError(422, "エラーが残っているため承認できません");
       }
       try {
-        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: rdraHash(store.model), now: now() });
-        await writeReview(feature.reviewFile, next);
+        const next = decide(await readReview(stageReviewFile(feature, stage)), {
+          decision,
+          comments,
+          hash: stage === "design" ? store.version : rdraHash(store.model),
+          now: now(),
+        });
+        await writeReview(stageReviewFile(feature, stage), next);
         return next;
       } catch (e) {
         if (e instanceof ReviewError) throw new HttpError(422, e.message);

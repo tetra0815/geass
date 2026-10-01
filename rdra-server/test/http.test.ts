@@ -5,7 +5,7 @@ import { createConnection } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { REVIEWS_DIR } from "../src/feature.js";
+import { DESIGN_REVIEWS_DIR, REVIEWS_DIR } from "../src/feature.js";
 import { startHttp, type RdraHttp } from "../src/http.js";
 import { rdraHash } from "../src/model/hash.js";
 import { RDRA_DIR } from "../src/model/io.js";
@@ -44,10 +44,29 @@ describe("HTTP API", () => {
     const { call, store } = await setup();
     const { status, body } = await call("GET", "/api/state");
     expect(status).toBe(200);
-    expect(body).toMatchObject({ version: store.version, parseError: null, approval: "none", review: { status: "none" } });
+    expect(body).toMatchObject({ version: store.version, parseError: null, approval: "none", review: { status: "none" }, design: { approval: "none", required: false } });
     expect(body.model.usecases[0].id).toBe("uc.place-order");
     expect(body.issues).toEqual([]);
     expect(body.layout["usecase-composite"]).toEqual({});
+  });
+
+  it("records design decisions in docs/design/reviews with the full hash", async () => {
+    const { call, store, repo } = await setup();
+    const designFile = join(repo, DESIGN_REVIEWS_DIR, "001-demo.json");
+    await writeReview(designFile, requestReview(emptyReview(), { now: "t" }));
+    expect((await call("GET", "/api/state")).body.design).toMatchObject({ approval: "pending", required: false, review: { status: "pending" } });
+    expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version, stage: "nope" })).status).toBe(400);
+
+    const res = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version, stage: "design" });
+    expect(res.status).toBe(200);
+    expect(JSON.parse(await readFile(designFile, "utf8"))).toMatchObject({ status: "approved", approved_hash: store.version });
+    expect((await call("GET", "/api/state")).body).toMatchObject({ approval: "none", design: { approval: "approved" } });
+  });
+
+  it("says the design is required once the feature changes it", async () => {
+    const { call, store } = await setup();
+    await store.apply([{ op: "upsert", kind: "components", element: { id: "comp.db", name: "業務 DB", type: "datastore" } }]);
+    expect((await call("GET", "/api/state")).body.design).toMatchObject({ approval: "none", required: true, review: { status: "none" } });
   });
 
   it("keeps an RDRA approval when only the design changes", async () => {
