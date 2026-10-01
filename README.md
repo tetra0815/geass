@@ -2,7 +2,7 @@
 
 RDRA-centric development harness for Claude Code.
 
-geass keeps one RDRA (Relationship Driven Requirement Analysis) model per project as the single source of requirements — including the project's principles and each usecase's acceptance criteria — has a human approve every change to it in a local review UI, and makes sure the implementation plan covers what was approved before any code is written. Everything around that is left to standard tools: git flow for branches, `gh` for issues and pull requests, and [superpowers](https://github.com/obra/superpowers) for design, planning and implementation.
+geass keeps one RDRA (Relationship Driven Requirement Analysis) model per project as the single source of requirements — including the project's principles and each usecase's acceptance criteria — and one design model that says how the system realizes it: the components it runs as, the tables it stores data in, and the decisions behind them. A human approves every change to either in a local review UI, and geass makes sure the implementation plan covers what was approved before any code is written. Everything around that is left to standard tools: git flow for branches, `gh` for issues and pull requests, and [superpowers](https://github.com/obra/superpowers) for planning and implementation.
 
 ## Requirements
 
@@ -24,9 +24,10 @@ geass keeps one RDRA (Relationship Driven Requirement Analysis) model per projec
 ```
 /feature-start <description>   issue + feature/<#>-<slug> from develop in its own worktree, new tab runs /rdra
 /rdra                          model principles, usecases and acceptance criteria → approve in the review UI → commit
-superpowers:brainstorming      technical design from the approved model (templates/README.md)
-superpowers:writing-plans      plan with "Covers: uc.<id>#<ac>, pr.<id>" under each task, committed on the branch
-/trace                         plan covers every required criterion and principle → execution unlocked
+/design                        components, tables and design decisions for the approved change → approve → commit
+                               (skipped when the feature changes nothing the design has to follow)
+superpowers:writing-plans      plan with "Covers: uc.<id>#<ac>, pr.<id>, tbl.<id>" under each task, committed on the branch
+/trace                         plan covers every required criterion, principle, component and table → execution unlocked
 superpowers:subagent-driven-development / executing-plans
 superpowers:finishing-a-development-branch → pull request
 
@@ -43,13 +44,23 @@ Skills do not call each other; each one ends by telling you the next step.
 - **Acceptance criteria** live on usecases (`given` / `when` / `then`) and are referenced as `uc.<id>#<ac>`. Every usecase a feature adds or changes needs at least one before review can be requested.
 - **Approval** is recorded in `docs/rdra/reviews/<feature>.json` and committed with the model. Only the review UI writes it.
 
+## The design model
+
+`docs/design/*.yaml` holds what every later feature builds on, as an index: each element has an id, a kind, relations and a few attributes, and points with `doc` to its detailed document (ER diagram, DDL, architecture notes — see `templates/README.md`).
+
+- **Components** (`comp.*`): units that run or are deployed — apps, workers, datastores, queues, external services — with their dependencies and the external systems and technology principles they realize.
+- **Tables** (`tbl.*`): tables, collections or key spaces, each in one datastore, with the information they realize and the state models they store. Columns stay in the native documents and migrations.
+- **Decisions** (`adr.*`): why the design is the way it is. A decision that is overturned is superseded by a new one, not deleted.
+
+Design elements point at RDRA elements; the RDRA model never points at the design. For every information element, external system and state model a feature adds or changes, the design has to show where it lives (`designFeatureIssues`). The review UI shows the design as a component diagram, a data diagram and a list of decisions, and records its approval in `docs/design/reviews/<feature>.json`.
+
 ## The gate
 
 A PreToolUse hook blocks, on `feature/*` branches (a branch with the feature prefix but a further `/`, such as `feature/team/42-x`, is refused outright until renamed to `feature/<id>`):
 
-- `superpowers:writing-plans` until the feature's RDRA change is approved and unchanged since;
-- `superpowers:executing-plans` and `superpowers:subagent-driven-development` until, in addition, `/trace` has passed for the current model and plan (ticking checkboxes does not count as a change);
-- edits to `docs/rdra/reviews/*.json` from file tools, on any branch.
+- `superpowers:writing-plans` until the feature's RDRA change is approved and unchanged since, and its design change is too — unless the feature changes no design element and the design already realizes its RDRA change;
+- `superpowers:executing-plans` and `superpowers:subagent-driven-development` until, in addition, `/trace` has passed for the current models and plan (ticking checkboxes does not count as a change);
+- edits to `docs/rdra/reviews/*.json` and `docs/design/reviews/*.json` from file tools, on any branch.
 
 If the gate cannot be evaluated (for example Node is missing), the gated call is denied.
 
@@ -69,7 +80,7 @@ If the gate cannot be evaluated (for example Node is missing), the gated call is
 
 `.geass/state/` holds the local `/trace` result and ignores itself in git.
 
-## Upgrading from 0.11
+## Upgrading
 
 See [CHANGELOG.md](CHANGELOG.md).
 

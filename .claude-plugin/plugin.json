@@ -1,12 +1,12 @@
 {
   "name": "geass",
-  "description": "RDRA-centric development harness for Claude Code: one RDRA model (principles, usecases with acceptance criteria, screens, events, information, states) as the source of requirements, human approval in a local review UI, a trace check that the implementation plan covers what was approved, and git-flow worktrees for features and hotfixes. Design, planning and implementation run on superpowers.",
-  "version": "0.12.0",
+  "description": "RDRA-centric development harness for Claude Code: one RDRA model (principles, usecases with acceptance criteria, screens, events, information, states) as the source of requirements, one design model (components, tables, design decisions) that realizes it, human approval of both in a local review UI, a trace check that the implementation plan covers what was approved, and git-flow worktrees for features and hotfixes. Planning and implementation run on superpowers.",
+  "version": "0.13.0",
   "author": {
     "name": "tetra0815"
   },
   "homepage": "https://github.com/tetra0815/geass",
   "repository": "https://github.com/tetra0815/geass",
   "license": "MIT",
-  "keywords": ["rdra", "requirements", "git-flow", "worktree", "superpowers", "mcp", "wezterm", "tmux"]
+  "keywords": ["rdra", "design", "requirements", "git-flow", "worktree", "superpowers", "mcp", "wezterm", "tmux"]
 }
