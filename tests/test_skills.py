@@ -37,6 +37,24 @@ def test_rdra_skill_covers_principles_acceptance_and_migration() -> None:
         assert needle in text, needle
 
 
+def test_rdra_skill_hands_off_to_design() -> None:
+    text = skill_text("rdra")
+    step7 = text[text.index("### Step 7"):]
+    assert "1. **Design** — `/design`" in step7
+
+
+def test_trace_skill_explains_design_elements() -> None:
+    text = skill_text("trace")
+    for needle in ["tbl.", "comp.", "removed", "/design"]:
+        assert needle in text, needle
+
+
+def test_templates_point_back_to_the_design_model() -> None:
+    text = (PLUGIN_ROOT / "templates" / "README.md").read_text()
+    for needle in ["/design", "doc", "comp.", "tbl.", "adr."]:
+        assert needle in text, needle
+
+
 def test_trace_skill_runs_the_cli() -> None:
     assert 'cli.js" trace --repo' in skill_text("trace")
 

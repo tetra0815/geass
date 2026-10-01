@@ -1,6 +1,6 @@
 ---
 name: "rdra"
-description: "Build or revise the project's RDRA model (docs/rdra) — principles, actors, usecases with acceptance criteria, screens, events, information, states — through dialogue using the rdra MCP tools, get it approved by a human in the local review UI, and hand off to superpowers for design, planning and implementation."
+description: "Build or revise the project's RDRA model (docs/rdra) — principles, actors, usecases with acceptance criteria, screens, events, information, states — through dialogue using the rdra MCP tools, get it approved by a human in the local review UI, and hand off to /design."
 argument-hint: "Feature description, or review feedback to address"
 compatibility: "Requires the geass plugin's rdra MCP server (Node 22.13+)"
 metadata:
@@ -11,7 +11,7 @@ disable-model-invocation: false
 
 # RDRA Modeling and Review
 
-The project keeps one RDRA model for the whole system in `docs/rdra/*.yaml`. It is the single source of requirements: the project's principles (what used to be a constitution), who uses the system, its usecases and their acceptance criteria, screens, events, information and states. A feature changes that model on its `feature/<id>` branch; a human reviews the change in the local review UI and approves it (the GO signal) or sends it back with comments. Until the model is approved and unchanged, the geass gate blocks `superpowers:writing-plans`, and until `/trace` has passed it also blocks `superpowers:executing-plans` and `superpowers:subagent-driven-development`.
+The project keeps one RDRA model for the whole system in `docs/rdra/*.yaml`. It is the single source of requirements: the project's principles (what used to be a constitution), who uses the system, its usecases and their acceptance criteria, screens, events, information and states. A feature changes that model on its `feature/<id>` branch; a human reviews the change in the local review UI and approves it (the GO signal) or sends it back with comments. Until the model is approved and unchanged — and then the feature's design, through `/design`, unless the feature needs no design work — the geass gate blocks `superpowers:writing-plans`, and until `/trace` has passed it also blocks `superpowers:executing-plans` and `superpowers:subagent-driven-development`.
 
 ## User Input
 
@@ -31,10 +31,12 @@ All model access goes through the geass plugin's `rdra` MCP server (in Claude Co
 | `rdra_diff` | Element-level changes since the feature's git-flow base; usecases also list `acceptance` changes per criterion |
 | `rdra_upsert` / `rdra_delete` | Add or update elements (merge by id; `null` removes a field) / delete with cascade |
 | `rdra_link` / `rdra_unlink` | Add or remove relations |
-| `rdra_request_review` | Mark the model as waiting for review; returns the review UI URL |
+| `rdra_request_review` | Mark the model as waiting for review; returns the review UI URL (`/design` uses the same tool with `stage: "design"`) |
 | `rdra_review_status` | `none` / `pending` / `approved` / `rejected`, the last round's comments, and whether an approval is stale |
 
 There is deliberately no tool to approve or reject. Approval is the human's decision, made in the review UI.
+
+The same server also holds the design model (`docs/design`: `components`, `tables`, `decisions`). `/rdra` does not edit it; `/design` does. `rdra_validate` reports the design's coverage of this feature as `designFeatureIssues` — ignore it here.
 
 ### Model reference
 
@@ -133,11 +135,11 @@ git commit -m "Approve RDRA model for <feature short description>"
 
 Then tell the user the next steps (do not start them yourself):
 
-1. **Design** — `superpowers:brainstorming`, with the approved RDRA model as settled input: design only what the model leaves to technology (storage, APIs, security, infrastructure, operations, client). `${CLAUDE_PLUGIN_ROOT}/templates/README.md` lists the design documents and templates. Engineering and technology principles apply throughout.
-2. **Plan** — `superpowers:writing-plans`. The plan goes in `docs/superpowers/plans/` and is committed on this branch. Under each task heading, one line names what the task delivers from the model, e.g. `Covers: uc.order-cancel#ac1, pr.audit-log`. Every acceptance criterion of a usecase this feature changed, and every `must` principle this feature added, changed or touches through its scope, must appear in some task's `Covers:` line.
+1. **Design** — `/design`, which turns the approved RDRA change into components, tables and design decisions and gets them approved in the same review UI. If the feature changes nothing the design has to follow, `/design` says so and planning can start right away.
+2. **Plan** — `superpowers:writing-plans`. The plan goes in `docs/superpowers/plans/` and is committed on this branch. Under each task heading, one line names what the task delivers from the models, e.g. `Covers: uc.order-cancel#ac1, pr.audit-log, tbl.orders`. Every acceptance criterion of a usecase this feature changed, every `must` principle this feature added, changed or touches through its scope, and every component and table the feature's design added, changed or removed must appear in some task's `Covers:` line.
 3. **Check** — `/trace`, which verifies step 2 and unlocks execution.
 4. **Build** — `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
-5. **Finish** — `superpowers:finishing-a-development-branch`, opening the pull request against the branch's base with a summary of the RDRA diff and a link to `docs/rdra/reviews/<feature>.json` in its body.
+5. **Finish** — `superpowers:finishing-a-development-branch`, opening the pull request against the branch's base with a summary of the RDRA and design diff and links to `docs/rdra/reviews/<feature>.json` and `docs/design/reviews/<feature>.json` in its body.
 
 ## Done When
 
