@@ -41,6 +41,30 @@ def test_trace_skill_runs_the_cli() -> None:
     assert 'cli.js" trace --repo' in skill_text("trace")
 
 
+def test_design_skill_covers_the_design_stage() -> None:
+    text = skill_text("design")
+    for needle in [
+        'stage: "design"',
+        "designFeatureIssues",
+        'cli.js" wait-review --stage design',
+        "docs/design",
+        "holds",
+        "superseded",
+        "/rdra",
+        "required",
+        "Covers:",
+        "/trace",
+    ]:
+        assert needle in text, needle
+
+
+def test_design_skill_uses_only_registered_tools() -> None:
+    registered = set(re.findall(r'registerTool\(\s*"(rdra_[a-z_]+)"', MCP))
+    used = set(re.findall(r"\b(rdra_[a-z_]+)\b", skill_text("design")))
+    assert used, "the design skill names no tools"
+    assert used <= registered, used - registered
+
+
 REMOVED_COMMAND = re.compile(
     r"(?<![\w/.-])/(specify|plan|tasks|analyze|checklist|converge|constitution|implement|taskstoissues|design-spec)\b(?![-.\w])"
 )
@@ -55,7 +79,7 @@ def shipped_files() -> list:
 
 
 def test_only_the_rdra_centric_skills_remain() -> None:
-    assert sorted(p.name for p in SKILLS.iterdir() if p.is_dir()) == ["feature-start", "fix-start", "rdra", "trace"]
+    assert sorted(p.name for p in SKILLS.iterdir() if p.is_dir()) == ["design", "feature-start", "fix-start", "rdra", "trace"]
 
 
 def test_spec_kit_files_are_gone() -> None:
