@@ -8,7 +8,7 @@ interface Props {
 }
 
 const slugPattern = new RegExp(`^${SLUG}$`);
-const ADDABLE = KINDS.filter((k) => k.key !== "principles");
+const ADDABLE = KINDS.filter((k) => k.layer === "rdra" && k.key !== "principles");
 
 export function Palette({ disabled, onApply }: Props) {
   const [kind, setKind] = useState<KindKey>("usecases");

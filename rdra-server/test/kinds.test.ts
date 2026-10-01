@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   AcceptanceSchema,
   ActorSchema,
+  ComponentSchema,
+  DecisionSchema,
+  TableSchema,
   KINDS,
   UsecaseSchema,
   StateModelSchema,
@@ -59,7 +62,42 @@ describe("kinds", () => {
       "information.yaml",
       "states.yaml",
       "principles.yaml",
+      "components.yaml",
+      "tables.yaml",
+      "decisions.yaml",
     ]);
+  });
+
+  it("puts the design kinds after the RDRA kinds", () => {
+    expect(KINDS.filter((k) => k.layer === "design").map((k) => `${k.key}:${k.prefix}`)).toEqual([
+      "components:comp",
+      "tables:tbl",
+      "decisions:adr",
+    ]);
+    expect(KINDS.slice(0, 9).every((k) => k.layer === "rdra")).toBe(true);
+    expect(kindOfId("tbl.orders")?.key).toBe("tables");
+  });
+
+  it("parses design elements with defaults and rejects missing required fields", () => {
+    expect(ComponentSchema.parse({ id: "comp.db", name: "DB", type: "datastore" })).toEqual({
+      id: "comp.db",
+      name: "DB",
+      type: "datastore",
+      dependsOn: [],
+      realizes: [],
+      holds: [],
+    });
+    expect(ComponentSchema.safeParse({ id: "comp.db", name: "DB", type: "database" }).success).toBe(false);
+    expect(TableSchema.safeParse({ id: "tbl.orders", name: "注文", store: "comp.db", realizes: [] }).success).toBe(false);
+    expect(TableSchema.safeParse({ id: "tbl.orders", name: "注文", realizes: ["inf.order"] }).success).toBe(false);
+    expect(TableSchema.parse({ id: "tbl.orders", name: "注文", store: "comp.db", realizes: ["inf.order"] })).toMatchObject({ states: [], related: [] });
+    expect(DecisionSchema.safeParse({ id: "adr.pg", name: "PG", status: "accepted", context: "c", decision: "" }).success).toBe(false);
+    expect(DecisionSchema.safeParse({ id: "adr.pg", name: "PG", status: "done", context: "c", decision: "d" }).success).toBe(false);
+    expect(DecisionSchema.parse({ id: "adr.pg", name: "PG", status: "accepted", context: "c", decision: "d" })).toMatchObject({
+      alternatives: [],
+      affects: [],
+      basis: [],
+    });
   });
 
   it("finds elements across kinds", () => {

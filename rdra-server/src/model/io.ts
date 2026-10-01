@@ -1,10 +1,24 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { LineCounter, parseDocument, stringify, type Document } from "yaml";
-import { KINDS, emptyModel, type AnyElement, type Model } from "./kinds.js";
+import { KINDS, emptyModel, type AnyElement, type KindDef, type Model } from "./kinds.js";
 
 export const RDRA_DIR = "docs/rdra";
+export const DESIGN_DIR = "docs/design";
 export type FileMap = Record<string, string>;
+
+/** The FileMap key of a kind: RDRA files keep their bare names, design files are prefixed with design/. */
+export function fileKey(kind: KindDef): string {
+  return kind.layer === "rdra" ? kind.file : `design/${kind.file}`;
+}
+
+/** The kind's file relative to the repository root. */
+export function repoPath(kind: KindDef): string {
+  return `${kind.layer === "rdra" ? RDRA_DIR : DESIGN_DIR}/${kind.file}`;
+}
+
+const PATH_OF_KEY = new Map(KINDS.map((k) => [fileKey(k), repoPath(k)]));
+const EMPTY_FILE = "[]\n";
 
 export class ModelParseError extends Error {
   constructor(
@@ -28,23 +42,24 @@ function lineOf(doc: Document, counter: LineCounter, path: (string | number)[]):
 export function parseModel(files: FileMap): Model {
   const model = emptyModel();
   for (const kind of KINDS) {
-    const text = files[kind.file];
+    const key = fileKey(kind);
+    const text = files[key];
     if (text === undefined || text.trim() === "") continue;
     const counter = new LineCounter();
     const doc = parseDocument(text, { lineCounter: counter });
     if (doc.errors.length > 0) {
       const first = doc.errors[0];
-      throw new ModelParseError(kind.file, first.linePos?.[0]?.line ?? null, first.message);
+      throw new ModelParseError(key, first.linePos?.[0]?.line ?? null, first.message);
     }
     const data: unknown = doc.toJS();
     if (data === null || data === undefined) continue;
-    if (!Array.isArray(data)) throw new ModelParseError(kind.file, 1, "トップレベルはリストにしてください");
+    if (!Array.isArray(data)) throw new ModelParseError(key, 1, "トップレベルはリストにしてください");
     data.forEach((raw, i) => {
       const result = kind.schema.safeParse(raw);
       if (!result.success) {
         const issue = result.error.issues[0];
         const path = [i, ...issue.path.filter((p): p is string | number => typeof p !== "symbol")];
-        throw new ModelParseError(kind.file, lineOf(doc, counter, path), `[${path.join(".")}] ${issue.message}`);
+        throw new ModelParseError(key, lineOf(doc, counter, path), `[${path.join(".")}] ${issue.message}`);
       }
       (model[kind.key] as AnyElement[]).push(result.data as AnyElement);
     });
@@ -70,7 +85,7 @@ export function serializeModel(model: Model): FileMap {
   const files: FileMap = {};
   for (const kind of KINDS) {
     const items = model[kind.key];
-    files[kind.file] = items.length === 0 ? "[]\n" : stringify(prune(items), { lineWidth: 0 });
+    files[fileKey(kind)] = items.length === 0 ? "[]\n" : stringify(prune(items), { lineWidth: 0 });
   }
   return files;
 }
@@ -79,7 +94,7 @@ export async function readModelFiles(repoRoot: string): Promise<FileMap> {
   const files: FileMap = {};
   for (const kind of KINDS) {
     try {
-      files[kind.file] = await readFile(join(repoRoot, RDRA_DIR, kind.file), "utf8");
+      files[fileKey(kind)] = await readFile(join(repoRoot, repoPath(kind)), "utf8");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     }
@@ -88,11 +103,13 @@ export async function readModelFiles(repoRoot: string): Promise<FileMap> {
 }
 
 export async function writeModelFiles(repoRoot: string, files: FileMap, previous: FileMap): Promise<string[]> {
-  const changed = Object.keys(files).filter((file) => previous[file] !== files[file]);
-  if (changed.length === 0) return [];
-  await mkdir(join(repoRoot, RDRA_DIR), { recursive: true });
-  for (const file of changed) {
-    await writeFile(join(repoRoot, RDRA_DIR, file), files[file], "utf8");
+  // A project that has not started its design yet keeps no docs/design.
+  const skip = (key: string) => key.startsWith("design/") && previous[key] === undefined && files[key] === EMPTY_FILE;
+  const changed = Object.keys(files).filter((key) => previous[key] !== files[key] && !skip(key));
+  for (const key of changed) {
+    const path = join(repoRoot, PATH_OF_KEY.get(key)!);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, files[key], "utf8");
   }
   return changed;
 }

@@ -4,13 +4,14 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ModelParseError,
+  DESIGN_DIR,
   RDRA_DIR,
   parseModel,
   readModelFiles,
   serializeModel,
   writeModelFiles,
 } from "../src/model/io.js";
-import { sampleFiles, sampleModel } from "./fixtures.js";
+import { sampleDesignFiles, sampleFiles, sampleModel } from "./fixtures.js";
 
 describe("parseModel", () => {
   it("parses every kind", () => {
@@ -56,6 +57,10 @@ describe("parseModel", () => {
   it("rejects a file whose top level is not a list", () => {
     expect(() => parseModel({ "actors.yaml": "id: act.a\n" })).toThrow(ModelParseError);
   });
+
+  it("names the design file in errors", () => {
+    expect(() => parseModel({ "design/tables.yaml": "- id: tbl.x\n  name: X\n" })).toThrow(/^design\/tables\.yaml:1: /);
+  });
 });
 
 describe("serializeModel", () => {
@@ -68,7 +73,7 @@ describe("serializeModel", () => {
     const files = serializeModel(parseModel({ "usecases.yaml": "- id: uc.a\n  name: A\n" }));
     expect(files["usecases.yaml"]).toBe("- id: uc.a\n  name: A\n");
     expect(files["actors.yaml"]).toBe("[]\n");
-    expect(Object.keys(files)).toHaveLength(9);
+    expect(Object.keys(files)).toHaveLength(12);
   });
 
   it("round-trips principles and acceptance criteria", () => {
@@ -97,7 +102,8 @@ describe("file io", () => {
     const changed = { ...files, "screens.yaml": "- id: scr.top\n  name: トップ\n" };
     expect(await writeModelFiles(dir, changed, files)).toEqual(["screens.yaml"]);
     expect(await readFile(join(dir, RDRA_DIR, "screens.yaml"), "utf8")).toContain("scr.top");
-    expect(await readModelFiles(dir)).toEqual(changed);
+    const onDisk = Object.fromEntries(Object.entries(changed).filter(([key]) => !key.startsWith("design/")));
+    expect(await readModelFiles(dir)).toEqual(onDisk);
   });
 
   it("reads files that exist on disk", async () => {
@@ -105,5 +111,24 @@ describe("file io", () => {
     await mkdir(join(dir, RDRA_DIR), { recursive: true });
     await writeFile(join(dir, RDRA_DIR, "actors.yaml"), sampleFiles()["actors.yaml"]);
     expect(await readModelFiles(dir)).toEqual({ "actors.yaml": sampleFiles()["actors.yaml"] });
+  });
+
+  it("reads and writes design kinds under docs/design", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "rdra-io-"));
+    const model = parseModel({ ...sampleFiles(), ...sampleDesignFiles() });
+    const files = serializeModel(model);
+    expect(Object.keys(files)).toContain("design/tables.yaml");
+    await writeModelFiles(dir, files, {});
+    expect(await readFile(join(dir, DESIGN_DIR, "tables.yaml"), "utf8")).toContain("tbl.orders");
+    expect((await readdir(join(dir, RDRA_DIR))).sort()).toHaveLength(9);
+    expect(parseModel(await readModelFiles(dir))).toEqual(model);
+  });
+
+  it("does not create empty design files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "rdra-io-"));
+    const files = serializeModel(sampleModel());
+    expect(files["design/components.yaml"]).toBe("[]\n");
+    await writeModelFiles(dir, files, {});
+    await expect(readdir(join(dir, DESIGN_DIR))).rejects.toThrow();
   });
 });

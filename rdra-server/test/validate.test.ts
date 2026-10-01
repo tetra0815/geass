@@ -4,7 +4,7 @@ import { parseModel } from "../src/model/io.js";
 import { formatTransitionRef, parseTransitionRef, relationsOf } from "../src/model/relations.js";
 import { hasErrors, validate, validateChanges } from "../src/validate.js";
 import { emptyModel } from "../src/model/kinds.js";
-import { sampleFiles, sampleModel } from "./fixtures.js";
+import { sampleFiles, sampleFullModel, sampleModel } from "./fixtures.js";
 
 const codes = (files: Record<string, string>) => validate(parseModel(files)).map((i) => `${i.level}:${i.code}:${i.elementId ?? ""}`);
 
@@ -16,6 +16,22 @@ describe("relationsOf", () => {
     expect(rels).toContainEqual({ from: "evt.payment-request", to: "ext.payment-gateway", kind: "evt.target", attrs: {} });
     expect(rels).toContainEqual({ from: "st.order", to: "inf.order", kind: "st.information", attrs: {} });
     expect(rels).toHaveLength(9);
+  });
+
+  it("extracts design relations with attrs", () => {
+    const design = relationsOf(sampleFullModel())
+      .filter((r) => ["comp", "tbl", "adr"].includes(r.from.split(".")[0]))
+      .map((r) => `${r.kind}|${r.from}|${r.to}|${JSON.stringify(r.attrs)}`)
+      .sort();
+    expect(design).toEqual([
+      "adr.affects|adr.postgres|comp.db|{}",
+      'comp.depends|comp.web|comp.db|{"label":"注文の読み書き"}',
+      "comp.depends|comp.web|comp.payment-adapter|{}",
+      "comp.realizes|comp.payment-adapter|ext.payment-gateway|{}",
+      "tbl.realizes|tbl.orders|inf.order|{}",
+      "tbl.state|tbl.orders|st.order|{}",
+      "tbl.store|tbl.orders|comp.db|{}",
+    ]);
   });
 });
 

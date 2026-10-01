@@ -44,3 +44,50 @@ export function sampleFiles(): FileMap {
 export function sampleModel(): Model {
   return parseModel(sampleFiles());
 }
+
+/** The sample model's design: a web app, a payment adapter, the business DB with the order table, and one decision. */
+export function sampleDesignFiles(): FileMap {
+  return {
+    "design/components.yaml": [
+      "- id: comp.web",
+      "  name: Web アプリ",
+      "  type: app",
+      "  tech: Next.js 16",
+      "  dependsOn:",
+      "    - { ref: comp.db, label: 注文の読み書き }",
+      "    - { ref: comp.payment-adapter }",
+      "- id: comp.payment-adapter",
+      "  name: 決済連携",
+      "  type: app",
+      "  realizes: [ext.payment-gateway]",
+      "- id: comp.db",
+      "  name: 業務 DB",
+      "  type: datastore",
+      "  tech: PostgreSQL 17",
+      "",
+    ].join("\n"),
+    "design/tables.yaml": [
+      "- id: tbl.orders",
+      "  name: 注文テーブル",
+      "  store: comp.db",
+      "  realizes: [inf.order]",
+      "  states: [st.order]",
+      "  key: order_id (uuid)",
+      "",
+    ].join("\n"),
+    "design/decisions.yaml": [
+      "- id: adr.postgres",
+      "  name: 業務データは PostgreSQL に置く",
+      "  status: accepted",
+      "  context: 注文の整合性が必要",
+      "  decision: PostgreSQL 17 を使う",
+      "  alternatives: [DynamoDB（トランザクションが弱い）]",
+      "  affects: [comp.db]",
+      "",
+    ].join("\n"),
+  };
+}
+
+export function sampleFullModel(): Model {
+  return parseModel({ ...sampleFiles(), ...sampleDesignFiles() });
+}

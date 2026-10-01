@@ -1,7 +1,7 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { RDRA_DIR } from "../src/model/io.js";
+import { DESIGN_DIR, RDRA_DIR } from "../src/model/io.js";
 import { RdraStore, type StoreChange } from "../src/store.js";
 import { sampleFiles } from "./fixtures.js";
 import { makeRepo } from "./helpers.js";
@@ -28,6 +28,16 @@ function nextChange(store: RdraStore, timeoutMs = 3000): Promise<StoreChange> {
 }
 
 describe("RdraStore", () => {
+  it("reloads when design files change on disk", async () => {
+    const repo = await makeRepo({ ...rdraFiles(), [`${DESIGN_DIR}/components.yaml`]: "[]\n" });
+    const store = await openStore(repo);
+    store.watch();
+    const changed = nextChange(store);
+    await writeFile(join(repo, DESIGN_DIR, "components.yaml"), "- id: comp.db\n  name: DB\n  type: datastore\n");
+    await changed;
+    expect(store.model.components.map((c) => c.id)).toEqual(["comp.db"]);
+  });
+
   it("opens an empty model without creating docs/rdra", async () => {
     const repo = await makeRepo();
     const store = await openStore(repo);

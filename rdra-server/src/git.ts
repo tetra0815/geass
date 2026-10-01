@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { RDRA_DIR, type FileMap } from "./model/io.js";
+import { fileKey, repoPath, type FileMap } from "./model/io.js";
 import { KINDS } from "./model/kinds.js";
 
 const execFileAsync = promisify(execFile);
@@ -51,8 +51,8 @@ export async function resolveBaseCommit(repoRoot: string): Promise<string | null
 export async function readModelFilesAt(repoRoot: string, commit: string): Promise<FileMap> {
   const files: FileMap = {};
   for (const kind of KINDS) {
-    const r = await git(repoRoot, ["show", `${commit}:${RDRA_DIR}/${kind.file}`]);
-    if (r.ok) files[kind.file] = r.stdout;
+    const r = await git(repoRoot, ["show", `${commit}:${repoPath(kind)}`]);
+    if (r.ok) files[fileKey(kind)] = r.stdout;
   }
   return files;
 }

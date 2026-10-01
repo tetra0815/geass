@@ -2,6 +2,7 @@ import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { DESIGN_DIR, RDRA_DIR } from "../src/model/io.js";
 import { REVIEWS_DIR, isInvalidFeature, resolveFeature } from "../src/feature.js";
 import { currentBranch, gitConfig, lastCommitTouching, readModelFilesAt, repoRootOf, resolveBaseCommit } from "../src/git.js";
 import { makeFeatureRepo, makeRepo, run, writeFiles } from "./helpers.js";
@@ -134,5 +135,19 @@ describe("resolveFeature", () => {
     run(repo, "git", ["checkout", "-q", "-b", "feat/team/42-x"]);
     run(repo, "git", ["config", "gitflow.prefix.feature", "feat/"]);
     expect(await resolveFeature(repo)).toMatchObject({ invalid: true, reason: expect.stringContaining("feat/<id>") });
+  });
+});
+
+describe("readModelFilesAt", () => {
+  it("reads RDRA and design files at a commit", async () => {
+    const repo = await makeRepo({
+      [`${RDRA_DIR}/actors.yaml`]: "- id: act.a\n  name: A\n",
+      [`${DESIGN_DIR}/components.yaml`]: "- id: comp.db\n  name: DB\n  type: datastore\n",
+    });
+    const head = run(repo, "git", ["rev-parse", "HEAD"]).trim();
+    expect(await readModelFilesAt(repo, head)).toEqual({
+      "actors.yaml": "- id: act.a\n  name: A\n",
+      "design/components.yaml": "- id: comp.db\n  name: DB\n  type: datastore\n",
+    });
   });
 });

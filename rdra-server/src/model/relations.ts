@@ -13,6 +13,16 @@ export const RELATION_KINDS = [
   "inf.related",
   "st.information",
   "pr.scope",
+  "comp.depends",
+  "comp.realizes",
+  "comp.holds",
+  "tbl.store",
+  "tbl.realizes",
+  "tbl.state",
+  "tbl.related",
+  "adr.affects",
+  "adr.basis",
+  "adr.superseded-by",
 ] as const;
 export type RelationKind = (typeof RELATION_KINDS)[number];
 
@@ -29,6 +39,16 @@ export const RELATION_FIELDS: Record<RelationKind, { field: string; shape: "ids"
   "inf.related": { field: "related", shape: "refs" },
   "st.information": { field: "information", shape: "single" },
   "pr.scope": { field: "scope", shape: "ids" },
+  "comp.depends": { field: "dependsOn", shape: "refs" },
+  "comp.realizes": { field: "realizes", shape: "ids" },
+  "comp.holds": { field: "holds", shape: "ids" },
+  "tbl.store": { field: "store", shape: "single" },
+  "tbl.realizes": { field: "realizes", shape: "ids" },
+  "tbl.state": { field: "states", shape: "ids" },
+  "tbl.related": { field: "related", shape: "refs" },
+  "adr.affects": { field: "affects", shape: "ids" },
+  "adr.basis": { field: "basis", shape: "ids" },
+  "adr.superseded-by": { field: "supersededBy", shape: "single" },
 };
 
 export const RELATION_TARGET_PREFIXES: Record<RelationKind, readonly string[]> = {
@@ -44,6 +64,16 @@ export const RELATION_TARGET_PREFIXES: Record<RelationKind, readonly string[]> =
   "inf.related": ["inf"],
   "st.information": ["inf"],
   "pr.scope": ["act", "ext", "buc", "uc", "scr", "inf", "st"],
+  "comp.depends": ["comp"],
+  "comp.realizes": ["ext", "pr"],
+  "comp.holds": ["inf"],
+  "tbl.store": ["comp"],
+  "tbl.realizes": ["inf"],
+  "tbl.state": ["st"],
+  "tbl.related": ["tbl"],
+  "adr.affects": ["comp", "tbl"],
+  "adr.basis": ["pr"],
+  "adr.superseded-by": ["adr"],
 };
 
 export interface Relation {

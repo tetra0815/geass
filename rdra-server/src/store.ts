@@ -5,6 +5,7 @@ import { modelHash } from "./model/hash.js";
 import {
   ModelParseError,
   RDRA_DIR,
+  DESIGN_DIR,
   parseModel,
   readModelFiles,
   serializeModel,
@@ -40,7 +41,7 @@ export class RdraStore extends EventEmitter {
   private currentVersion = modelHash(emptyModel());
   private error: ModelParseError | null = null;
   private queue: Promise<unknown> = Promise.resolve();
-  private watcher: FSWatcher | null = null;
+  private readonly watchers = new Map<string, FSWatcher>();
   private watching = false;
   private reloadTimer: NodeJS.Timeout | null = null;
 
@@ -94,17 +95,20 @@ export class RdraStore extends EventEmitter {
 
   close(): void {
     this.watching = false;
-    this.watcher?.close();
-    this.watcher = null;
+    for (const watcher of this.watchers.values()) watcher.close();
+    this.watchers.clear();
     if (this.reloadTimer) clearTimeout(this.reloadTimer);
     this.reloadTimer = null;
   }
 
   private startWatcher(): void {
-    if (!this.watching || this.watcher) return;
-    const dir = join(this.repoRoot, RDRA_DIR);
-    if (!existsSync(dir)) return;
-    this.watcher = watch(dir, () => this.scheduleReload());
+    if (!this.watching) return;
+    for (const relative of [RDRA_DIR, DESIGN_DIR]) {
+      if (this.watchers.has(relative)) continue;
+      const dir = join(this.repoRoot, relative);
+      if (!existsSync(dir)) continue;
+      this.watchers.set(relative, watch(dir, () => this.scheduleReload()));
+    }
   }
 
   private scheduleReload(): void {
