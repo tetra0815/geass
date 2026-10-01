@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../src/cli.js";
 import { isInvalidFeature, resolveFeature } from "../src/feature.js";
 import { gatePath, gateSkill } from "../src/gate.js";
-import { rdraHash } from "../src/model/hash.js";
+import { modelHash, rdraHash } from "../src/model/hash.js";
 import { DESIGN_DIR, RDRA_DIR, parseModel, readModelFiles } from "../src/model/io.js";
 import { decide, emptyReview, requestReview, writeReview } from "../src/review.js";
 import { runTrace } from "../src/trace-run.js";
@@ -25,15 +25,46 @@ async function approve(repo: string) {
   await writeReview(file, decide(requestReview(emptyReview(), { now: T }), { decision: "approved", comments: [], hash, now: T }));
 }
 
+async function approveDesign(repo: string) {
+  const feature = await resolveFeature(repo);
+  if (!feature || isInvalidFeature(feature)) throw new Error("not a feature branch");
+  const hash = modelHash(parseModel(await readModelFiles(repo)));
+  await writeReview(feature.designReviewFile, decide(requestReview(emptyReview(), { now: T }), { decision: "approved", comments: [], hash, now: T }));
+}
+
 const reason = (d: { decision: string; reason?: string }) => (d.decision === "deny" ? d.reason : "");
 
 describe("gateSkill", () => {
-  it("keeps the RDRA approval when only the design changes", async () => {
+  it("requires a design approval once the feature changes the design", async () => {
     const { repo } = await tracedFeatureRepo();
     await approve(repo);
     await mkdir(join(repo, DESIGN_DIR), { recursive: true });
     await writeFile(join(repo, DESIGN_DIR, "components.yaml"), "- id: comp.db\n  name: DB\n  type: datastore\n");
+    expect(reason(await gateSkill(repo, "superpowers:writing-plans"))).toContain("設計のレビューがまだ依頼されていません");
+
+    await approveDesign(repo);
     expect(await gateSkill(repo, "superpowers:writing-plans")).toEqual({ decision: "allow" });
+
+    run(repo, "git", ["add", "-A"]);
+    run(repo, "git", ["commit", "-q", "-m", "approve design"]);
+    await writeFile(join(repo, DESIGN_DIR, "components.yaml"), "- id: comp.db\n  name: 業務 DB\n  type: datastore\n");
+    const stale = reason(await gateSkill(repo, "superpowers:writing-plans"));
+    expect(stale).toContain("/design で再レビュー");
+    expect(stale).toContain("modified comp.db");
+  });
+
+  it("reports a stale RDRA approval before the design", async () => {
+    const { repo } = await tracedFeatureRepo();
+    await approve(repo);
+    await mkdir(join(repo, DESIGN_DIR), { recursive: true });
+    await writeFile(join(repo, DESIGN_DIR, "components.yaml"), "- id: comp.db\n  name: DB\n  type: datastore\n");
+    await approveDesign(repo);
+    run(repo, "git", ["add", "-A"]);
+    run(repo, "git", ["commit", "-q", "-m", "approve both"]);
+    await writeFile(join(repo, RDRA_DIR, "screens.yaml"), "- id: scr.cart\n  name: カート画面\n");
+    expect(reason(await gateSkill(repo, "superpowers:writing-plans"))).toContain("承認後に RDRA が変更されました");
+    await approve(repo);
+    expect(reason(await gateSkill(repo, "superpowers:writing-plans"))).toContain("/design で再レビュー");
   });
 
   it("allows skills it does not gate and anything outside a feature", async () => {
@@ -104,6 +135,8 @@ describe("gatePath", () => {
   it("denies review records anywhere and allows other files", () => {
     expect(gatePath("/work/repo/docs/rdra/reviews/42-x.json").decision).toBe("deny");
     expect(gatePath("/work/repo/.claude/worktrees/feature/42-x/docs/rdra/reviews/42-x.json").decision).toBe("deny");
+    expect(gatePath("/work/repo/docs/design/reviews/42-x.json").decision).toBe("deny");
+    expect(gatePath("/work/repo/docs/design/tables.yaml")).toEqual({ decision: "allow" });
     expect(gatePath("/work/repo/docs/rdra/usecases.yaml")).toEqual({ decision: "allow" });
     expect(gatePath("/work/repo/docs/rdra/reviews-notes.md")).toEqual({ decision: "allow" });
   });

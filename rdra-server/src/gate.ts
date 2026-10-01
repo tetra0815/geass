@@ -1,5 +1,5 @@
 import { resolve, sep } from "node:path";
-import { checkFeatureApproval } from "./approval.js";
+import { checkDesignApproval, checkFeatureApproval } from "./approval.js";
 import { resolveBaseCommit } from "./git.js";
 import { modelHash } from "./model/hash.js";
 import { featurePlans, planHashes, readMarker, samePlans } from "./trace-state.js";
@@ -13,15 +13,16 @@ export const GATED_SKILLS: ReadonlySet<string> = new Set([...PLAN_SKILLS, ...EXE
 const allow: GateDecision = { decision: "allow" };
 const deny = (reason: string): GateDecision => ({ decision: "deny", reason });
 
+const changedNote = (changed?: string[]) => (changed?.length ? ` 変更された要素: ${changed.join(", ")}` : "");
+
 export async function gateSkill(repoRoot: string, skill: string): Promise<GateDecision> {
   const name = skill.split(":").at(-1) ?? skill;
   if (!GATED_SKILLS.has(name)) return allow;
   const approval = await checkFeatureApproval(repoRoot);
   if (approval.state === "outside") return allow;
-  if (approval.state !== "approved") {
-    const changed = approval.changed?.length ? ` 変更された要素: ${approval.changed.join(", ")}` : "";
-    return deny(approval.message + changed);
-  }
+  if (approval.state !== "approved") return deny(approval.message + changedNote(approval.changed));
+  const design = await checkDesignApproval(repoRoot, approval.feature!, approval.model!);
+  if (design.state !== "approved" && design.state !== "not-required") return deny(design.message + changedNote(design.changed));
   if (!EXECUTION_SKILLS.has(name)) return allow;
 
   const marker = await readMarker(repoRoot, approval.featureId!);
@@ -35,10 +36,14 @@ export async function gateSkill(repoRoot: string, skill: string): Promise<GateDe
   return allow;
 }
 
+const REVIEW_DIRS = ["/docs/rdra/reviews/", "/docs/design/reviews/"];
+
 export function gatePath(file: string): GateDecision {
   const normalized = resolve(file).split(sep).join("/");
-  if (normalized.includes("/docs/rdra/reviews/")) {
-    return deny("承認記録（docs/rdra/reviews/）はレビュー画面からのみ更新できます。承認・差し戻しは人間がレビュー画面で行ってください。");
+  if (REVIEW_DIRS.some((dir) => normalized.includes(dir))) {
+    return deny(
+      "承認記録（docs/rdra/reviews/、docs/design/reviews/）はレビュー画面からのみ更新できます。承認・差し戻しは人間がレビュー画面で行ってください。",
+    );
   }
   return allow;
 }

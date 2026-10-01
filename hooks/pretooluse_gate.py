@@ -7,7 +7,7 @@ This hook only picks the tool calls that need a decision:
 
   - Skill superpowers:writing-plans / executing-plans /
     subagent-driven-development (namespaced or bare) on a feature branch.
-  - Edit / Write / MultiEdit of a file under docs/rdra/reviews/ (review
+  - Edit / Write / MultiEdit of a file under docs/rdra/reviews/ or docs/design/reviews/ (review
     records are written only by the review UI).
 
 Everything else passes without starting node. A gated call whose decision
@@ -24,7 +24,7 @@ from typing import List, Optional
 
 GATED_SKILLS = {"writing-plans", "executing-plans", "subagent-driven-development"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit"}
-REVIEWS_SEGMENT = "/docs/rdra/reviews/"
+REVIEWS_SEGMENTS = ("/docs/rdra/reviews/", "/docs/design/reviews/")
 
 
 def deny(reason: str) -> dict:
@@ -91,7 +91,8 @@ def gate_args(data: object) -> Optional[List[str]]:
         if not isinstance(path, str) or not path:
             return None
         absolute = os.path.abspath(path)
-        if REVIEWS_SEGMENT not in absolute.replace(os.sep, "/"):
+        normalized = absolute.replace(os.sep, "/")
+        if not any(segment in normalized for segment in REVIEWS_SEGMENTS):
             return None
         return ["--path", absolute]
     if tool_name == "Skill":

@@ -13,6 +13,7 @@ from conftest import PLUGIN_ROOT, approve, git
 
 HOOK = PLUGIN_ROOT / "hooks" / "pretooluse_gate.py"
 REVIEW = Path("docs") / "rdra" / "reviews" / "001-demo.json"
+DESIGN_REVIEW = Path("docs") / "design" / "reviews" / "001-demo.json"
 
 
 def run_gate(
@@ -109,6 +110,17 @@ def test_review_records_cannot_be_edited(feature_repo: Path, tool: str) -> None:
 def test_review_records_are_protected_outside_a_feature_too(feature_repo: Path) -> None:
     git(feature_repo, "checkout", "-q", "develop")
     assert "レビュー画面からのみ" in denied_reason(run_gate(feature_repo, edit(feature_repo / REVIEW)))
+
+
+def test_design_review_records_cannot_be_edited(feature_repo: Path) -> None:
+    assert "レビュー画面からのみ" in denied_reason(run_gate(feature_repo, edit(feature_repo / DESIGN_REVIEW)))
+
+
+def test_design_changes_need_a_design_approval(feature_repo: Path) -> None:
+    approve(feature_repo)
+    (feature_repo / "docs" / "design").mkdir(parents=True)
+    (feature_repo / "docs" / "design" / "components.yaml").write_text("- id: comp.db\n  name: DB\n  type: datastore\n")
+    assert "設計のレビューがまだ依頼されていません" in denied_reason(run_gate(feature_repo, skill("superpowers:writing-plans")))
 
 
 def test_unparseable_gate_output_fails_closed(feature_repo: Path, tmp_path: Path) -> None:

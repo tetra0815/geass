@@ -29423,7 +29423,20 @@ function kindOfId(id) {
   return KINDS.find((k) => k.prefix === prefix);
 }
 function emptyModel() {
-  return { actors: [], externalSystems: [], bucs: [], usecases: [], screens: [], events: [], information: [], states: [], principles: [] };
+  return {
+    actors: [],
+    externalSystems: [],
+    bucs: [],
+    usecases: [],
+    screens: [],
+    events: [],
+    information: [],
+    states: [],
+    principles: [],
+    components: [],
+    tables: [],
+    decisions: []
+  };
 }
 function findElement(model, id) {
   const kind = kindOfId(id);
@@ -29432,7 +29445,7 @@ function findElement(model, id) {
   const index = list.findIndex((e) => e.id === id);
   return index >= 0 ? { kind, element: list[index], index } : void 0;
 }
-var SLUG, slugPattern, KIND_KEYS, idList, AccessSchema, AcceptanceSchema, ActorSchema, ExternalSystemSchema, ScreenSchema, BucSchema, UsecaseSchema, EventSchema, InformationSchema, StateModelSchema, PRINCIPLE_CATEGORIES, PrincipleCategorySchema, PrincipleLevelSchema, PrincipleSchema, KINDS;
+var SLUG, slugPattern, KIND_KEYS, idList, AccessSchema, AcceptanceSchema, ActorSchema, ExternalSystemSchema, ScreenSchema, BucSchema, UsecaseSchema, EventSchema, InformationSchema, StateModelSchema, PRINCIPLE_CATEGORIES, PrincipleCategorySchema, PrincipleLevelSchema, PrincipleSchema, labelledRefs, COMPONENT_TYPES, ComponentSchema, TableSchema, DECISION_STATUSES, DecisionSchema, KINDS;
 var init_kinds = __esm({
   "src/model/kinds.ts"() {
     "use strict";
@@ -29448,7 +29461,10 @@ var init_kinds = __esm({
       "events",
       "information",
       "states",
-      "principles"
+      "principles",
+      "components",
+      "tables",
+      "decisions"
     ];
     idList = () => external_exports.array(external_exports.string()).default(() => []);
     AccessSchema = external_exports.enum(["create", "read", "update", "delete"]);
@@ -29501,23 +29517,63 @@ var init_kinds = __esm({
       level: PrincipleLevelSchema,
       scope: idList()
     });
+    labelledRefs = () => external_exports.array(external_exports.strictObject({ ref: external_exports.string(), label: external_exports.string().optional() })).default(() => []);
+    COMPONENT_TYPES = ["app", "worker", "datastore", "queue", "external"];
+    ComponentSchema = external_exports.strictObject({
+      ...common("comp"),
+      type: external_exports.enum(COMPONENT_TYPES),
+      tech: external_exports.string().optional(),
+      dependsOn: labelledRefs(),
+      realizes: idList(),
+      holds: idList(),
+      doc: external_exports.string().optional()
+    });
+    TableSchema = external_exports.strictObject({
+      ...common("tbl"),
+      store: external_exports.string({ error: "store\uFF08\u7F6E\u304D\u5834\u6240\u306E comp.*\uFF09\u304C\u5FC5\u8981\u3067\u3059" }),
+      realizes: external_exports.array(external_exports.string()).min(1, "realizes \u306B\u306F\u5B9F\u73FE\u3059\u308B\u60C5\u5831\uFF08inf.*\uFF09\u3092 1 \u3064\u4EE5\u4E0A\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044"),
+      states: idList(),
+      key: external_exports.string().optional(),
+      related: labelledRefs(),
+      doc: external_exports.string().optional()
+    });
+    DECISION_STATUSES = ["proposed", "accepted", "superseded"];
+    DecisionSchema = external_exports.strictObject({
+      ...common("adr"),
+      status: external_exports.enum(DECISION_STATUSES),
+      context: external_exports.string().min(1, "context\uFF08\u80CC\u666F\uFF09\u304C\u5FC5\u8981\u3067\u3059"),
+      decision: external_exports.string().min(1, "decision\uFF08\u6C7A\u5B9A\u5185\u5BB9\uFF09\u304C\u5FC5\u8981\u3067\u3059"),
+      alternatives: external_exports.array(external_exports.string()).default(() => []),
+      affects: idList(),
+      basis: idList(),
+      supersededBy: external_exports.string().nullish()
+    });
     KINDS = [
-      { key: "actors", prefix: "act", file: "actors.yaml", table: "actors", label: "\u30A2\u30AF\u30BF\u30FC", schema: ActorSchema },
-      { key: "externalSystems", prefix: "ext", file: "external-systems.yaml", table: "external_systems", label: "\u5916\u90E8\u30B7\u30B9\u30C6\u30E0", schema: ExternalSystemSchema },
-      { key: "bucs", prefix: "buc", file: "bucs.yaml", table: "bucs", label: "BUC", schema: BucSchema },
-      { key: "usecases", prefix: "uc", file: "usecases.yaml", table: "usecases", label: "\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9", schema: UsecaseSchema },
-      { key: "screens", prefix: "scr", file: "screens.yaml", table: "screens", label: "\u753B\u9762", schema: ScreenSchema },
-      { key: "events", prefix: "evt", file: "events.yaml", table: "events", label: "\u30A4\u30D9\u30F3\u30C8", schema: EventSchema },
-      { key: "information", prefix: "inf", file: "information.yaml", table: "information", label: "\u60C5\u5831", schema: InformationSchema },
-      { key: "states", prefix: "st", file: "states.yaml", table: "state_models", label: "\u72B6\u614B\u30E2\u30C7\u30EB", schema: StateModelSchema },
-      { key: "principles", prefix: "pr", file: "principles.yaml", table: "principles", label: "\u539F\u5247", schema: PrincipleSchema }
+      { key: "actors", layer: "rdra", prefix: "act", file: "actors.yaml", table: "actors", label: "\u30A2\u30AF\u30BF\u30FC", schema: ActorSchema },
+      { key: "externalSystems", layer: "rdra", prefix: "ext", file: "external-systems.yaml", table: "external_systems", label: "\u5916\u90E8\u30B7\u30B9\u30C6\u30E0", schema: ExternalSystemSchema },
+      { key: "bucs", layer: "rdra", prefix: "buc", file: "bucs.yaml", table: "bucs", label: "BUC", schema: BucSchema },
+      { key: "usecases", layer: "rdra", prefix: "uc", file: "usecases.yaml", table: "usecases", label: "\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9", schema: UsecaseSchema },
+      { key: "screens", layer: "rdra", prefix: "scr", file: "screens.yaml", table: "screens", label: "\u753B\u9762", schema: ScreenSchema },
+      { key: "events", layer: "rdra", prefix: "evt", file: "events.yaml", table: "events", label: "\u30A4\u30D9\u30F3\u30C8", schema: EventSchema },
+      { key: "information", layer: "rdra", prefix: "inf", file: "information.yaml", table: "information", label: "\u60C5\u5831", schema: InformationSchema },
+      { key: "states", layer: "rdra", prefix: "st", file: "states.yaml", table: "state_models", label: "\u72B6\u614B\u30E2\u30C7\u30EB", schema: StateModelSchema },
+      { key: "principles", layer: "rdra", prefix: "pr", file: "principles.yaml", table: "principles", label: "\u539F\u5247", schema: PrincipleSchema },
+      { key: "components", layer: "design", prefix: "comp", file: "components.yaml", table: "components", label: "\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8", schema: ComponentSchema },
+      { key: "tables", layer: "design", prefix: "tbl", file: "tables.yaml", table: "tables", label: "\u30C6\u30FC\u30D6\u30EB", schema: TableSchema },
+      { key: "decisions", layer: "design", prefix: "adr", file: "decisions.yaml", table: "decisions", label: "\u8A2D\u8A08\u5224\u65AD", schema: DecisionSchema }
     ];
   }
 });
 
 // src/model/io.ts
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+function fileKey(kind) {
+  return kind.layer === "rdra" ? kind.file : `design/${kind.file}`;
+}
+function repoPath(kind) {
+  return `${kind.layer === "rdra" ? RDRA_DIR : DESIGN_DIR}/${kind.file}`;
+}
 function lineOf(doc, counter, path) {
   for (let n = path.length; n > 0; n--) {
     const node2 = doc.getIn(path.slice(0, n), true);
@@ -29528,23 +29584,24 @@ function lineOf(doc, counter, path) {
 function parseModel(files) {
   const model = emptyModel();
   for (const kind of KINDS) {
-    const text = files[kind.file];
+    const key = fileKey(kind);
+    const text = files[key];
     if (text === void 0 || text.trim() === "") continue;
     const counter = new import_yaml.LineCounter();
     const doc = (0, import_yaml.parseDocument)(text, { lineCounter: counter });
     if (doc.errors.length > 0) {
       const first = doc.errors[0];
-      throw new ModelParseError(kind.file, first.linePos?.[0]?.line ?? null, first.message);
+      throw new ModelParseError(key, first.linePos?.[0]?.line ?? null, first.message);
     }
     const data = doc.toJS();
     if (data === null || data === void 0) continue;
-    if (!Array.isArray(data)) throw new ModelParseError(kind.file, 1, "\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F\u30EA\u30B9\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
+    if (!Array.isArray(data)) throw new ModelParseError(key, 1, "\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F\u30EA\u30B9\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     data.forEach((raw, i) => {
       const result = kind.schema.safeParse(raw);
       if (!result.success) {
         const issue2 = result.error.issues[0];
         const path = [i, ...issue2.path.filter((p) => typeof p !== "symbol")];
-        throw new ModelParseError(kind.file, lineOf(doc, counter, path), `[${path.join(".")}] ${issue2.message}`);
+        throw new ModelParseError(key, lineOf(doc, counter, path), `[${path.join(".")}] ${issue2.message}`);
       }
       model[kind.key].push(result.data);
     });
@@ -29568,7 +29625,7 @@ function serializeModel(model) {
   const files = {};
   for (const kind of KINDS) {
     const items = model[kind.key];
-    files[kind.file] = items.length === 0 ? "[]\n" : (0, import_yaml.stringify)(prune(items), { lineWidth: 0 });
+    files[fileKey(kind)] = items.length === 0 ? "[]\n" : (0, import_yaml.stringify)(prune(items), { lineWidth: 0 });
   }
   return files;
 }
@@ -29576,7 +29633,7 @@ async function readModelFiles(repoRoot) {
   const files = {};
   for (const kind of KINDS) {
     try {
-      files[kind.file] = await readFile(join(repoRoot, RDRA_DIR, kind.file), "utf8");
+      files[fileKey(kind)] = await readFile(join(repoRoot, repoPath(kind)), "utf8");
     } catch (e) {
       if (e.code !== "ENOENT") throw e;
     }
@@ -29584,21 +29641,25 @@ async function readModelFiles(repoRoot) {
   return files;
 }
 async function writeModelFiles(repoRoot, files, previous) {
-  const changed = Object.keys(files).filter((file2) => previous[file2] !== files[file2]);
-  if (changed.length === 0) return [];
-  await mkdir(join(repoRoot, RDRA_DIR), { recursive: true });
-  for (const file2 of changed) {
-    await writeFile(join(repoRoot, RDRA_DIR, file2), files[file2], "utf8");
+  const skip = (key) => key.startsWith("design/") && previous[key] === void 0 && files[key] === EMPTY_FILE;
+  const changed = Object.keys(files).filter((key) => previous[key] !== files[key] && !skip(key));
+  for (const key of changed) {
+    const path = join(repoRoot, PATH_OF_KEY.get(key));
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, files[key], "utf8");
   }
   return changed;
 }
-var import_yaml, RDRA_DIR, ModelParseError;
+var import_yaml, RDRA_DIR, DESIGN_DIR, PATH_OF_KEY, EMPTY_FILE, ModelParseError;
 var init_io = __esm({
   "src/model/io.ts"() {
     "use strict";
     import_yaml = __toESM(require_dist(), 1);
     init_kinds();
     RDRA_DIR = "docs/rdra";
+    DESIGN_DIR = "docs/design";
+    PATH_OF_KEY = new Map(KINDS.map((k) => [fileKey(k), repoPath(k)]));
+    EMPTY_FILE = "[]\n";
     ModelParseError = class extends Error {
       constructor(file2, line, detail) {
         super(`${file2}${line ? `:${line}` : ""}: ${detail}`);
@@ -29656,8 +29717,8 @@ async function resolveBaseCommit(repoRoot) {
 async function readModelFilesAt(repoRoot, commit) {
   const files = {};
   for (const kind of KINDS) {
-    const r = await git(repoRoot, ["show", `${commit}:${RDRA_DIR}/${kind.file}`]);
-    if (r.ok) files[kind.file] = r.stdout;
+    const r = await git(repoRoot, ["show", `${commit}:${repoPath(kind)}`]);
+    if (r.ok) files[fileKey(kind)] = r.stdout;
   }
   return files;
 }
@@ -33373,20 +33434,28 @@ function canonicalize(value) {
   }
   return value;
 }
-function canonicalModel(model) {
+function canonicalModel(model, kinds = KINDS) {
   const out = {};
-  for (const kind of KINDS) {
+  for (const kind of kinds) {
     out[kind.key] = [...model[kind.key]].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).map(canonicalize);
   }
   return out;
 }
-function modelHash(model) {
-  return "sha256:" + createHash("sha256").update(JSON.stringify(canonicalModel(model))).digest("hex");
+function hashOf(value) {
+  return "sha256:" + createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
+function modelHash(model) {
+  return hashOf(canonicalModel(model));
+}
+function rdraHash(model) {
+  return hashOf(canonicalModel(model, RDRA_KINDS));
+}
+var RDRA_KINDS;
 var init_hash = __esm({
   "src/model/hash.ts"() {
     "use strict";
     init_kinds();
+    RDRA_KINDS = KINDS.filter((k) => k.layer === "rdra");
   }
 });
 
@@ -33470,14 +33539,20 @@ async function resolveFeature(repoRoot) {
   if (!branch.startsWith(prefix)) return null;
   const id = branch.slice(prefix.length);
   if (!FEATURE_ID.test(id)) return { invalid: true, branch, reason: invalidReason(branch, prefix, id) };
-  return { id, branch, reviewFile: join2(repoRoot, REVIEWS_DIR, `${id}.json`) };
+  return {
+    id,
+    branch,
+    reviewFile: join2(repoRoot, REVIEWS_DIR, `${id}.json`),
+    designReviewFile: join2(repoRoot, DESIGN_REVIEWS_DIR, `${id}.json`)
+  };
 }
-var REVIEWS_DIR, FEATURE_ID, isInvalidFeature;
+var REVIEWS_DIR, DESIGN_REVIEWS_DIR, FEATURE_ID, isInvalidFeature;
 var init_feature = __esm({
   "src/feature.ts"() {
     "use strict";
     init_git();
     REVIEWS_DIR = "docs/rdra/reviews";
+    DESIGN_REVIEWS_DIR = "docs/design/reviews";
     FEATURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
     isInvalidFeature = (f) => f !== null && "invalid" in f;
   }
@@ -33551,7 +33626,7 @@ var init_layout = __esm({
 // src/review.ts
 import { randomBytes } from "node:crypto";
 import { mkdir as mkdir3, readFile as readFile3, rename, rm, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname as dirname2 } from "node:path";
 function emptyReview() {
   return { status: "none", approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
 }
@@ -33568,7 +33643,7 @@ async function readReview(file2) {
   return { ...emptyReview(), ...data };
 }
 async function writeReview(file2, record2) {
-  await mkdir3(dirname(file2), { recursive: true });
+  await mkdir3(dirname2(file2), { recursive: true });
   const tmp = `${file2}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
   try {
     await writeFile3(tmp, JSON.stringify(record2, null, 2) + "\n", "utf8");
@@ -33664,7 +33739,17 @@ var init_relations = __esm({
       "evt.target",
       "inf.related",
       "st.information",
-      "pr.scope"
+      "pr.scope",
+      "comp.depends",
+      "comp.realizes",
+      "comp.holds",
+      "tbl.store",
+      "tbl.realizes",
+      "tbl.state",
+      "tbl.related",
+      "adr.affects",
+      "adr.basis",
+      "adr.superseded-by"
     ];
     RELATION_FIELDS = {
       "buc.actor": { field: "actors", shape: "ids" },
@@ -33678,7 +33763,17 @@ var init_relations = __esm({
       "evt.target": { field: "target", shape: "single" },
       "inf.related": { field: "related", shape: "refs" },
       "st.information": { field: "information", shape: "single" },
-      "pr.scope": { field: "scope", shape: "ids" }
+      "pr.scope": { field: "scope", shape: "ids" },
+      "comp.depends": { field: "dependsOn", shape: "refs" },
+      "comp.realizes": { field: "realizes", shape: "ids" },
+      "comp.holds": { field: "holds", shape: "ids" },
+      "tbl.store": { field: "store", shape: "single" },
+      "tbl.realizes": { field: "realizes", shape: "ids" },
+      "tbl.state": { field: "states", shape: "ids" },
+      "tbl.related": { field: "related", shape: "refs" },
+      "adr.affects": { field: "affects", shape: "ids" },
+      "adr.basis": { field: "basis", shape: "ids" },
+      "adr.superseded-by": { field: "supersededBy", shape: "single" }
     };
     RELATION_TARGET_PREFIXES = {
       "buc.actor": ["act"],
@@ -33692,7 +33787,17 @@ var init_relations = __esm({
       "evt.target": ["act", "ext"],
       "inf.related": ["inf"],
       "st.information": ["inf"],
-      "pr.scope": ["act", "ext", "buc", "uc", "scr", "inf", "st"]
+      "pr.scope": ["act", "ext", "buc", "uc", "scr", "inf", "st"],
+      "comp.depends": ["comp"],
+      "comp.realizes": ["ext", "pr"],
+      "comp.holds": ["inf"],
+      "tbl.store": ["comp"],
+      "tbl.realizes": ["inf"],
+      "tbl.state": ["st"],
+      "tbl.related": ["tbl"],
+      "adr.affects": ["comp", "tbl"],
+      "adr.basis": ["pr"],
+      "adr.superseded-by": ["adr"]
     };
     transitionPattern = new RegExp(`^(st\\.${SLUG}):(${SLUG})->(${SLUG})$`);
   }
@@ -33702,7 +33807,7 @@ var init_relations = __esm({
 function hasErrors(issues) {
   return issues.some((i) => i.level === "error");
 }
-function validate2(model) {
+function validate2(model, opts = {}) {
   const issues = [];
   const error62 = (code, message, elementId) => issues.push({ level: "error", code, message, elementId });
   const warn = (code, message, elementId) => issues.push({ level: "warning", code, message, elementId });
@@ -33779,6 +33884,37 @@ function validate2(model) {
       warn("principle-without-description", `${p.id} \u306F MUST \u3067\u3059\u304C\u3001\u4F55\u3092\u6E80\u305F\u305B\u3070\u5B88\u3063\u305F\u3053\u3068\u306B\u306A\u308B\u304B\uFF08\u8AAC\u660E\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, p.id);
     }
   }
+  const related = new Set(relationsOf(model).flatMap((r) => [r.from, r.to]));
+  const checkDoc = (id, doc) => {
+    if (doc && opts.fileExists && !opts.fileExists(doc)) warn("missing-doc", `${id} \u306E doc ${doc} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093`, id);
+  };
+  const components = new Map(model.components.map((c) => [c.id, c]));
+  for (const c of model.components) {
+    if (!related.has(c.id)) warn("isolated-component", `${c.id} \u306F\u3069\u306E\u8981\u7D20\u3068\u3082\u95A2\u4FC2\u3057\u3066\u3044\u307E\u305B\u3093`, c.id);
+    checkDoc(c.id, c.doc);
+  }
+  for (const t of model.tables) {
+    const store = components.get(t.store);
+    if (store && store.type !== "datastore") {
+      error62("table-store-not-datastore", `${t.id} \u306E\u7F6E\u304D\u5834\u6240 ${t.store} \u306F datastore \u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF08type: ${store.type}\uFF09`, t.id);
+    }
+    for (const id of t.states) {
+      const sm = stateModels.get(id);
+      if (sm && (!sm.information || !t.realizes.includes(sm.information))) {
+        error62("table-state-mismatch", `${t.id} \u306E\u72B6\u614B ${id} \u306F\u3001${t.id} \u304C\u5B9F\u73FE\u3059\u308B\u60C5\u5831\u306E\u72B6\u614B\u30E2\u30C7\u30EB\u3067\u306F\u3042\u308A\u307E\u305B\u3093`, t.id);
+      }
+    }
+    checkDoc(t.id, t.doc);
+  }
+  const decisions = new Map(model.decisions.map((d) => [d.id, d]));
+  for (const d of model.decisions) {
+    if (d.status === "superseded" && !d.supersededBy) {
+      error62("decision-without-successor", `${d.id} \u306F superseded \u3067\u3059\u304C\u3001\u5F8C\u7D99\uFF08supersededBy\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, d.id);
+    }
+    if (d.supersededBy && decisions.get(d.supersededBy)?.status === "superseded") {
+      error62("decision-successor-superseded", `${d.id} \u306E\u5F8C\u7D99 ${d.supersededBy} \u3082 superseded \u3067\u3059\u3002\u6709\u52B9\u306A\u5224\u65AD\u3092\u6307\u3057\u3066\u304F\u3060\u3055\u3044`, d.id);
+    }
+  }
   return issues;
 }
 function validateChanges(changes) {
@@ -33789,15 +33925,54 @@ function validateChanges(changes) {
     elementId: c.id
   }));
 }
+function validateDesignChanges(model, changes) {
+  const issues = [];
+  const error62 = (code, message, elementId) => issues.push({ level: "error", code, message, elementId });
+  const inTables = new Set(model.tables.flatMap((t) => t.realizes));
+  const held = new Set(model.components.flatMap((c) => c.holds));
+  const realizedByComponents = new Set(model.components.flatMap((c) => c.realizes));
+  for (const id of liveIds(changes, "externalSystems")) {
+    if (!realizedByComponents.has(id)) error62("external-system-not-realized", `${id} \u3068\u9023\u643A\u3059\u308B\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8\uFF08realizes\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, id);
+  }
+  for (const id of liveIds(changes, "information")) {
+    if (!inTables.has(id) && !held.has(id)) {
+      error62("information-not-realized", `${id} \u3092\u4FDD\u5B58\u3059\u308B\u30C6\u30FC\u30D6\u30EB\u3082\u3001\u4FDD\u6301\u3059\u308B\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8\uFF08holds\uFF09\u3082\u3042\u308A\u307E\u305B\u3093`, id);
+    }
+  }
+  for (const id of liveIds(changes, "states")) {
+    const info = model.states.find((s) => s.id === id)?.information;
+    if (!info) continue;
+    const tables = model.tables.filter((t) => t.realizes.includes(info));
+    if (tables.length > 0 && !tables.some((t) => t.states.includes(id))) {
+      error62("state-not-stored", `${id} \u3092\u72B6\u614B\u3068\u3057\u3066\u6301\u3064\u30C6\u30FC\u30D6\u30EB\u304C\u3042\u308A\u307E\u305B\u3093\uFF08${tables.map((t) => t.id).join(", ")} \u306E states \u306B\u52A0\u3048\u3066\u304F\u3060\u3055\u3044\uFF09`, id);
+    }
+  }
+  const grounded = /* @__PURE__ */ new Set([...realizedByComponents, ...model.decisions.flatMap((d) => d.basis)]);
+  for (const id of liveIds(changes, "principles")) {
+    const p = model.principles.find((x) => x.id === id);
+    if (p && p.category === "technology" && p.level === "must" && !grounded.has(id)) {
+      issues.push({
+        level: "warning",
+        code: "technology-principle-not-realized",
+        message: `${id} \u3092\u5B9F\u73FE\u3059\u308B\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8\uFF08realizes\uFF09\u3082\u3001\u6839\u62E0\u306B\u3059\u308B\u8A2D\u8A08\u5224\u65AD\uFF08basis\uFF09\u3082\u3042\u308A\u307E\u305B\u3093`,
+        elementId: id
+      });
+    }
+  }
+  return issues;
+}
+var liveIds;
 var init_validate = __esm({
   "src/validate.ts"() {
     "use strict";
     init_kinds();
     init_relations();
+    liveIds = (changes, kind) => changes.filter((c) => c.kind === kind && c.type !== "removed").map((c) => c.id);
   }
 });
 
 // src/http.ts
+import { existsSync } from "node:fs";
 import { readFile as readFile4 } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join as join4, normalize, sep } from "node:path";
@@ -33846,11 +34021,11 @@ async function startHttp(deps, port = 0) {
       version: store.version,
       parseError: store.parseError?.message ?? null,
       model: store.model,
-      issues: validate2(store.model),
+      issues: validate2(store.model, { fileExists: (path) => existsSync(join4(store.repoRoot, path)) }),
       layout: await readLayout(store.repoRoot),
       feature: feature?.id ?? null,
       review,
-      approval: review ? approvalState(review, store.version).state : "none"
+      approval: review ? approvalState(review, rdraHash(store.model)).state : "none"
     };
   }
   async function diff() {
@@ -33886,7 +34061,7 @@ async function startHttp(deps, port = 0) {
         throw new HttpError(422, "\u30A8\u30E9\u30FC\u304C\u6B8B\u3063\u3066\u3044\u308B\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093");
       }
       try {
-        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: store.version, now: now() });
+        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: rdraHash(store.model), now: now() });
         await writeReview(feature.reviewFile, next);
         return next;
       } catch (e) {
@@ -33976,6 +34151,7 @@ var init_http = __esm({
     init_base_diff();
     init_feature();
     init_layout();
+    init_hash();
     init_io();
     init_view_keys();
     init_review();
@@ -49642,7 +49818,8 @@ var init_version = __esm({
 });
 
 // src/mcp.ts
-import { relative } from "node:path";
+import { existsSync as existsSync2 } from "node:fs";
+import { join as join5, relative } from "node:path";
 function createMcpServer(deps) {
   const { store, index } = deps;
   const now = deps.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
@@ -49651,18 +49828,19 @@ function createMcpServer(deps) {
     const result = await store.apply(ops);
     return result.ok ? json2(result) : fail(`${result.reason}: ${result.message}`);
   };
-  const featureIssues = async () => {
+  const featureChanges = async () => {
     const diff = await diffAgainstBase(store.repoRoot, store.model);
     if (!diff.base) {
       const feature = await resolveFeature(store.repoRoot);
       if (feature && !isInvalidFeature(feature)) return null;
     }
-    return validateChanges(diff.changes);
+    return diff.changes;
   };
+  const fileExists = (path) => existsSync2(join5(store.repoRoot, path));
   server.registerTool(
     "rdra_get_model",
     {
-      description: "RDRA \u30E2\u30C7\u30EB\uFF08docs/rdra\uFF09\u3092\u53D6\u5F97\u3059\u308B\u3002kind \u3092\u6307\u5B9A\u3059\u308B\u3068\u305D\u306E\u7A2E\u5225\u3060\u3051\u3092\u8FD4\u3059\u3002",
+      description: "RDRA \u30E2\u30C7\u30EB\uFF08docs/rdra\uFF09\u3068\u8A2D\u8A08\u30E2\u30C7\u30EB\uFF08docs/design\uFF09\u3092\u53D6\u5F97\u3059\u308B\u3002kind \u3092\u6307\u5B9A\u3059\u308B\u3068\u305D\u306E\u7A2E\u5225\u3060\u3051\u3092\u8FD4\u3059\u3002",
       inputSchema: { kind: external_exports.enum(KIND_KEYS).optional() }
     },
     async ({ kind }) => {
@@ -49677,7 +49855,7 @@ function createMcpServer(deps) {
   server.registerTool(
     "rdra_query",
     {
-      description: "RDRA \u30E2\u30C7\u30EB\u306B\u8AAD\u307F\u53D6\u308A\u5C02\u7528\u306E SQL \u3067\u554F\u3044\u5408\u308F\u305B\u308B\u3002\u30C6\u30FC\u30D6\u30EB: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref), acceptance(usecase_id, ac_id, ref, given_text, when_text, then_text)\u3002\u30D3\u30E5\u30FC: principle_scope(principle_id, target_id)\u3001\u7A2E\u5225\u3054\u3068\u306E actors, external_systems, bucs, usecases, screens, events, information, state_models, principles\u3002",
+      description: "RDRA \u30E2\u30C7\u30EB\u306B\u8AAD\u307F\u53D6\u308A\u5C02\u7528\u306E SQL \u3067\u554F\u3044\u5408\u308F\u305B\u308B\u3002\u30C6\u30FC\u30D6\u30EB: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref), acceptance(usecase_id, ac_id, ref, given_text, when_text, then_text)\u3002\u30D3\u30E5\u30FC: principle_scope(principle_id, target_id)\u3001\u7A2E\u5225\u3054\u3068\u306E actors, external_systems, bucs, usecases, screens, events, information, state_models, principles\u3001components, tables, decisions\u3002",
       inputSchema: { sql: external_exports.string().min(1) }
     },
     async ({ sql }) => {
@@ -49691,12 +49869,20 @@ function createMcpServer(deps) {
   );
   server.registerTool(
     "rdra_validate",
-    { description: "RDRA \u30E2\u30C7\u30EB\u306E\u6574\u5408\u6027\u30C1\u30A7\u30C3\u30AF\u3002issues \u306E error \u3068 featureIssues\uFF08\u3053\u306E feature \u306E\u5DEE\u5206\u306B\u5BFE\u3059\u308B\u691C\u67FB\uFF09\u306F\u30EC\u30D3\u30E5\u30FC\u4F9D\u983C\u3092\u59A8\u3052\u3001warning \u306F\u59A8\u3052\u306A\u3044\u3002", inputSchema: {} },
+    {
+      description: "RDRA \u3068\u8A2D\u8A08\u306E\u30E2\u30C7\u30EB\u306E\u6574\u5408\u6027\u30C1\u30A7\u30C3\u30AF\u3002issues \u306E error \u306F\u30EC\u30D3\u30E5\u30FC\u4F9D\u983C\u3092\u59A8\u3052\u3001warning \u306F\u59A8\u3052\u306A\u3044\u3002featureIssues \u306F\u3053\u306E feature \u306E RDRA \u306E\u5DEE\u5206\u306E\u691C\u67FB\uFF08RDRA \u30EC\u30D3\u30E5\u30FC\u3092\u59A8\u3052\u308B\uFF09\u3001designFeatureIssues \u306F\u8A2D\u8A08\u304C\u3053\u306E feature \u306E RDRA \u306E\u5DEE\u5206\u3092\u5B9F\u73FE\u3057\u3066\u3044\u308B\u304B\u306E\u691C\u67FB\uFF08error \u304C\u8A2D\u8A08\u30EC\u30D3\u30E5\u30FC\u3092\u59A8\u3052\u308B\uFF09\u3002",
+      inputSchema: {}
+    },
     async () => {
       try {
-        const changeIssues = await featureIssues();
-        if (!changeIssues) return fail(`\u3053\u306E feature \u306E\u5DEE\u5206\u3092\u691C\u67FB\u3067\u304D\u307E\u305B\u3093: ${NO_BASE_MESSAGE}`);
-        return json2({ parseError: store.parseError?.message ?? null, issues: validate2(store.model), featureIssues: changeIssues });
+        const changes = await featureChanges();
+        if (!changes) return fail(`\u3053\u306E feature \u306E\u5DEE\u5206\u3092\u691C\u67FB\u3067\u304D\u307E\u305B\u3093: ${NO_BASE_MESSAGE}`);
+        return json2({
+          parseError: store.parseError?.message ?? null,
+          issues: validate2(store.model, { fileExists }),
+          featureIssues: validateChanges(changes),
+          designFeatureIssues: validateDesignChanges(store.model, changes)
+        });
       } catch (e) {
         if (e instanceof ModelParseError) return fail(`\u5206\u5C90\u70B9\u306E RDRA \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
         throw e;
@@ -49720,7 +49906,7 @@ function createMcpServer(deps) {
   server.registerTool(
     "rdra_upsert",
     {
-      description: "\u8981\u7D20\u3092\u8FFD\u52A0\u307E\u305F\u306F\u66F4\u65B0\u3059\u308B\uFF08\u65E2\u5B58 ID \u306A\u3089\u6307\u5B9A\u3057\u305F\u30D5\u30A3\u30FC\u30EB\u30C9\u3060\u3051\u3092\u4E0A\u66F8\u304D\uFF09\u3002kind: actors, externalSystems, bucs, usecases, screens, events, information, states, principles\u3002ID \u306F <\u63A5\u982D\u8F9E>.<\u30B9\u30E9\u30C3\u30B0>\uFF08act, ext, buc, uc, scr, evt, inf, st, pr\uFF09\u3002principles \u306F category\uFF08business/quality/security/engineering/technology\uFF09\u3068 level\uFF08must/should\uFF09\u304C\u5FC5\u9808\u3002usecases \u306E acceptance \u306F [{id, given?, when, then}]\u3002",
+      description: "\u8981\u7D20\u3092\u8FFD\u52A0\u307E\u305F\u306F\u66F4\u65B0\u3059\u308B\uFF08\u65E2\u5B58 ID \u306A\u3089\u6307\u5B9A\u3057\u305F\u30D5\u30A3\u30FC\u30EB\u30C9\u3060\u3051\u3092\u4E0A\u66F8\u304D\uFF09\u3002kind: actors, externalSystems, bucs, usecases, screens, events, information, states, principles\uFF08RDRA\u3001docs/rdra\uFF09\u3001components, tables, decisions\uFF08\u8A2D\u8A08\u3001docs/design\uFF09\u3002ID \u306F <\u63A5\u982D\u8F9E>.<\u30B9\u30E9\u30C3\u30B0>\uFF08act, ext, buc, uc, scr, evt, inf, st, pr, comp, tbl, adr\uFF09\u3002principles \u306F category\uFF08business/quality/security/engineering/technology\uFF09\u3068 level\uFF08must/should\uFF09\u304C\u5FC5\u9808\u3002usecases \u306E acceptance \u306F [{id, given?, when, then}]\u3002components \u306F type\uFF08app/worker/datastore/queue/external\uFF09\u304C\u5FC5\u9808\u3001\u4EFB\u610F\u3067 tech, dependsOn [{ref, label?}], realizes\uFF08ext/pr\uFF09, holds\uFF08inf\uFF09, doc\u3002tables \u306F store\uFF08datastore \u306E comp\uFF09\u3068 realizes\uFF08inf \u3092 1 \u3064\u4EE5\u4E0A\uFF09\u304C\u5FC5\u9808\u3001\u4EFB\u610F\u3067 states\uFF08st\uFF09, key, related [{ref, label?}], doc\u3002decisions \u306F status\uFF08proposed/accepted/superseded\uFF09, context, decision \u304C\u5FC5\u9808\u3001\u4EFB\u610F\u3067 alternatives, affects\uFF08comp/tbl\uFF09, basis\uFF08pr\uFF09, supersededBy\uFF08adr\uFF09\u3002",
       inputSchema: {
         items: external_exports.array(external_exports.object({ kind: external_exports.enum(KIND_KEYS), element: external_exports.record(external_exports.string(), external_exports.unknown()) })).min(1)
       }
@@ -49729,13 +49915,13 @@ function createMcpServer(deps) {
   );
   server.registerTool(
     "rdra_delete",
-    { description: "\u8981\u7D20\u3092\u524A\u9664\u3059\u308B\u3002\u305D\u306E\u8981\u7D20\u3092\u53C2\u7167\u3057\u3066\u3044\u308B\u95A2\u9023\u3082\u540C\u6642\u306B\u5916\u308C\u3001removedRelations \u306B\u8FD4\u308B\u3002", inputSchema: { ids: external_exports.array(external_exports.string()).min(1) } },
+    { description: "\u8981\u7D20\u3092\u524A\u9664\u3059\u308B\u3002\u305D\u306E\u8981\u7D20\u3092\u53C2\u7167\u3057\u3066\u3044\u308B\u95A2\u9023\u3082\u540C\u6642\u306B\u5916\u308C\u3001removedRelations \u306B\u8FD4\u308B\u3002\u53C2\u7167\u5143\u306E\u8981\u7D20\u304C\u6210\u308A\u7ACB\u305F\u306A\u304F\u306A\u308B\u524A\u9664\uFF08\u30C6\u30FC\u30D6\u30EB\u306E\u7F6E\u304D\u5834\u6240\u3084\u552F\u4E00\u306E\u5B9F\u73FE\u60C5\u5831\u306A\u3069\uFF09\u306F\u62D2\u5426\u3055\u308C\u308B\u3002", inputSchema: { ids: external_exports.array(external_exports.string()).min(1) } },
     async ({ ids }) => applyTool(ids.map((id) => ({ op: "delete", id })))
   );
   server.registerTool(
     "rdra_link",
     {
-      description: "\u95A2\u9023\u3092\u5F35\u308B\u3002relation \u306F\u8D77\u70B9\u306E\u7A2E\u5225\u3067\u6C7A\u307E\u308B\uFF08\u4F8B: uc.screen \u306F uc -> scr\uFF09\u3002uc.information \u306B\u306F attrs.access\uFF08create/read/update/delete\uFF09\u304C\u5FC5\u8981\u3002uc.transition \u306E to \u306F st.<\u30E2\u30C7\u30EB>:<\u72B6\u614B>-><\u72B6\u614B>\u3002inf.related \u306B\u306F\u4EFB\u610F\u3067 attrs.label\u3002pr.scope \u306F pr -> act/ext/buc/uc/scr/inf/st\uFF08\u539F\u5247\u304C\u304B\u304B\u308B\u8981\u7D20\uFF09\u3002",
+      description: "\u95A2\u9023\u3092\u5F35\u308B\u3002relation \u306F\u8D77\u70B9\u306E\u7A2E\u5225\u3067\u6C7A\u307E\u308B\uFF08\u4F8B: uc.screen \u306F uc -> scr\uFF09\u3002uc.information \u306B\u306F attrs.access\uFF08create/read/update/delete\uFF09\u304C\u5FC5\u8981\u3002uc.transition \u306E to \u306F st.<\u30E2\u30C7\u30EB>:<\u72B6\u614B>-><\u72B6\u614B>\u3002inf.related \u306B\u306F\u4EFB\u610F\u3067 attrs.label\u3002pr.scope \u306F pr -> act/ext/buc/uc/scr/inf/st\uFF08\u539F\u5247\u304C\u304B\u304B\u308B\u8981\u7D20\uFF09\u3002\u8A2D\u8A08: comp.depends\uFF08comp -> comp\u3001\u4EFB\u610F\u3067 attrs.label\uFF09, comp.realizes\uFF08comp -> ext/pr\uFF09, comp.holds\uFF08comp -> inf\uFF09, tbl.store\uFF08tbl -> comp\uFF09, tbl.realizes\uFF08tbl -> inf\uFF09, tbl.state\uFF08tbl -> st\uFF09, tbl.related\uFF08tbl -> tbl\u3001\u4EFB\u610F\u3067 attrs.label\uFF09, adr.affects\uFF08adr -> comp/tbl\uFF09, adr.basis\uFF08adr -> pr\uFF09, adr.superseded-by\uFF08adr -> adr\uFF09\u3002",
       inputSchema: {
         links: external_exports.array(linkShape.extend({ attrs: external_exports.record(external_exports.string(), external_exports.string()).optional() })).min(1)
       }
@@ -49768,7 +49954,8 @@ ${errors.join("\n")}`);
       }
       let blockers;
       try {
-        blockers = await featureIssues();
+        const changes = await featureChanges();
+        blockers = changes && validateChanges(changes);
       } catch (e) {
         if (e instanceof ModelParseError) return fail(`\u5206\u5C90\u70B9\u306E RDRA \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
         throw e;
@@ -49799,7 +49986,7 @@ ${blockers.map((i) => `- ${i.message}`).join("\n")}`);
       const record2 = await readReview(feature.reviewFile);
       return json2({
         status: record2.status,
-        approval: approvalState(record2, store.version).state,
+        approval: approvalState(record2, rdraHash(store.model)).state,
         lastRound: record2.rounds.at(-1) ?? null,
         url: deps.reviewUrl()
       });
@@ -49815,6 +50002,7 @@ var init_mcp2 = __esm({
     init_zod();
     init_base_diff();
     init_feature();
+    init_hash();
     init_io();
     init_kinds();
     init_relations();
@@ -49956,6 +50144,14 @@ function remove(model, id) {
   model[found.kind.key].splice(found.index, 1);
   const incoming = relationsOf(model).filter((r) => pointsAt(r, id));
   for (const r of incoming) detach(model, r.kind, r.from, r.to);
+  for (const from of new Set(incoming.map((r) => r.from))) {
+    try {
+      reparse(model, from);
+    } catch (e) {
+      if (!(e instanceof OperationError)) throw e;
+      throw new OperationError(`${id} \u3092\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002${from} \u304C\u5FC5\u8981\u3068\u3057\u3066\u3044\u307E\u3059\uFF08\u5148\u306B ${from} \u3092\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\uFF09: ${e.message}`);
+    }
+  }
   return [...outgoing, ...incoming];
 }
 function link(model, relation, from, to, attrs = {}) {
@@ -49996,6 +50192,7 @@ function applyOperations(input2, ops) {
         if (!detach(model, op.relation, op.from, op.to)) {
           throw new OperationError(`${op.from} \u304B\u3089 ${op.to} \u3078\u306E ${op.relation} \u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
         }
+        reparse(model, op.from);
         break;
     }
   }
@@ -50018,8 +50215,8 @@ var init_operations = __esm({
 
 // src/store.ts
 import { EventEmitter } from "node:events";
-import { existsSync, watch } from "node:fs";
-import { join as join5 } from "node:path";
+import { existsSync as existsSync3, watch } from "node:fs";
+import { join as join6 } from "node:path";
 var issueKey, RdraStore;
 var init_store = __esm({
   "src/store.ts"() {
@@ -50042,7 +50239,7 @@ var init_store = __esm({
       currentVersion = modelHash(emptyModel());
       error = null;
       queue = Promise.resolve();
-      watcher = null;
+      watchers = /* @__PURE__ */ new Map();
       watching = false;
       reloadTimer = null;
       static async open(repoRoot) {
@@ -50082,16 +50279,19 @@ var init_store = __esm({
       }
       close() {
         this.watching = false;
-        this.watcher?.close();
-        this.watcher = null;
+        for (const watcher of this.watchers.values()) watcher.close();
+        this.watchers.clear();
         if (this.reloadTimer) clearTimeout(this.reloadTimer);
         this.reloadTimer = null;
       }
       startWatcher() {
-        if (!this.watching || this.watcher) return;
-        const dir = join5(this.repoRoot, RDRA_DIR);
-        if (!existsSync(dir)) return;
-        this.watcher = watch(dir, () => this.scheduleReload());
+        if (!this.watching) return;
+        for (const relative2 of [RDRA_DIR, DESIGN_DIR]) {
+          if (this.watchers.has(relative2)) continue;
+          const dir = join6(this.repoRoot, relative2);
+          if (!existsSync3(dir)) continue;
+          this.watchers.set(relative2, watch(dir, () => this.scheduleReload()));
+        }
       }
       scheduleReload() {
         if (this.reloadTimer) clearTimeout(this.reloadTimer);
@@ -50173,10 +50373,10 @@ __export(server_exports, {
   startServer: () => startServer
 });
 import { EventEmitter as EventEmitter2 } from "node:events";
-import { dirname as dirname2, join as join6 } from "node:path";
+import { dirname as dirname3, join as join7 } from "node:path";
 import { fileURLToPath } from "node:url";
 function bundledWebRoot() {
-  return join6(dirname2(fileURLToPath(import.meta.url)), "web");
+  return join7(dirname3(fileURLToPath(import.meta.url)), "web");
 }
 async function startServer() {
   const cwd = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();

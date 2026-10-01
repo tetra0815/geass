@@ -20426,7 +20426,20 @@ function kindOfId(id) {
   return KINDS.find((k) => k.prefix === prefix);
 }
 function emptyModel() {
-  return { actors: [], externalSystems: [], bucs: [], usecases: [], screens: [], events: [], information: [], states: [], principles: [] };
+  return {
+    actors: [],
+    externalSystems: [],
+    bucs: [],
+    usecases: [],
+    screens: [],
+    events: [],
+    information: [],
+    states: [],
+    principles: [],
+    components: [],
+    tables: [],
+    decisions: []
+  };
 }
 function findElement(model, id) {
   const kind = kindOfId(id);
@@ -20435,7 +20448,7 @@ function findElement(model, id) {
   const index = list2.findIndex((e) => e.id === id);
   return index >= 0 ? { kind, element: list2[index], index } : void 0;
 }
-var SLUG, slugPattern, idList, AccessSchema, AcceptanceSchema, ActorSchema, ExternalSystemSchema, ScreenSchema, BucSchema, UsecaseSchema, EventSchema, InformationSchema, StateModelSchema, PRINCIPLE_CATEGORIES, PrincipleCategorySchema, PrincipleLevelSchema, PrincipleSchema, KINDS;
+var SLUG, slugPattern, idList, AccessSchema, AcceptanceSchema, ActorSchema, ExternalSystemSchema, ScreenSchema, BucSchema, UsecaseSchema, EventSchema, InformationSchema, StateModelSchema, PRINCIPLE_CATEGORIES, PrincipleCategorySchema, PrincipleLevelSchema, PrincipleSchema, labelledRefs, COMPONENT_TYPES, ComponentSchema, TableSchema, DECISION_STATUSES, DecisionSchema, KINDS;
 var init_kinds = __esm({
   "src/model/kinds.ts"() {
     "use strict";
@@ -20493,16 +20506,50 @@ var init_kinds = __esm({
       level: PrincipleLevelSchema,
       scope: idList()
     });
+    labelledRefs = () => external_exports.array(external_exports.strictObject({ ref: external_exports.string(), label: external_exports.string().optional() })).default(() => []);
+    COMPONENT_TYPES = ["app", "worker", "datastore", "queue", "external"];
+    ComponentSchema = external_exports.strictObject({
+      ...common("comp"),
+      type: external_exports.enum(COMPONENT_TYPES),
+      tech: external_exports.string().optional(),
+      dependsOn: labelledRefs(),
+      realizes: idList(),
+      holds: idList(),
+      doc: external_exports.string().optional()
+    });
+    TableSchema = external_exports.strictObject({
+      ...common("tbl"),
+      store: external_exports.string({ error: "store\uFF08\u7F6E\u304D\u5834\u6240\u306E comp.*\uFF09\u304C\u5FC5\u8981\u3067\u3059" }),
+      realizes: external_exports.array(external_exports.string()).min(1, "realizes \u306B\u306F\u5B9F\u73FE\u3059\u308B\u60C5\u5831\uFF08inf.*\uFF09\u3092 1 \u3064\u4EE5\u4E0A\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044"),
+      states: idList(),
+      key: external_exports.string().optional(),
+      related: labelledRefs(),
+      doc: external_exports.string().optional()
+    });
+    DECISION_STATUSES = ["proposed", "accepted", "superseded"];
+    DecisionSchema = external_exports.strictObject({
+      ...common("adr"),
+      status: external_exports.enum(DECISION_STATUSES),
+      context: external_exports.string().min(1, "context\uFF08\u80CC\u666F\uFF09\u304C\u5FC5\u8981\u3067\u3059"),
+      decision: external_exports.string().min(1, "decision\uFF08\u6C7A\u5B9A\u5185\u5BB9\uFF09\u304C\u5FC5\u8981\u3067\u3059"),
+      alternatives: external_exports.array(external_exports.string()).default(() => []),
+      affects: idList(),
+      basis: idList(),
+      supersededBy: external_exports.string().nullish()
+    });
     KINDS = [
-      { key: "actors", prefix: "act", file: "actors.yaml", table: "actors", label: "\u30A2\u30AF\u30BF\u30FC", schema: ActorSchema },
-      { key: "externalSystems", prefix: "ext", file: "external-systems.yaml", table: "external_systems", label: "\u5916\u90E8\u30B7\u30B9\u30C6\u30E0", schema: ExternalSystemSchema },
-      { key: "bucs", prefix: "buc", file: "bucs.yaml", table: "bucs", label: "BUC", schema: BucSchema },
-      { key: "usecases", prefix: "uc", file: "usecases.yaml", table: "usecases", label: "\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9", schema: UsecaseSchema },
-      { key: "screens", prefix: "scr", file: "screens.yaml", table: "screens", label: "\u753B\u9762", schema: ScreenSchema },
-      { key: "events", prefix: "evt", file: "events.yaml", table: "events", label: "\u30A4\u30D9\u30F3\u30C8", schema: EventSchema },
-      { key: "information", prefix: "inf", file: "information.yaml", table: "information", label: "\u60C5\u5831", schema: InformationSchema },
-      { key: "states", prefix: "st", file: "states.yaml", table: "state_models", label: "\u72B6\u614B\u30E2\u30C7\u30EB", schema: StateModelSchema },
-      { key: "principles", prefix: "pr", file: "principles.yaml", table: "principles", label: "\u539F\u5247", schema: PrincipleSchema }
+      { key: "actors", layer: "rdra", prefix: "act", file: "actors.yaml", table: "actors", label: "\u30A2\u30AF\u30BF\u30FC", schema: ActorSchema },
+      { key: "externalSystems", layer: "rdra", prefix: "ext", file: "external-systems.yaml", table: "external_systems", label: "\u5916\u90E8\u30B7\u30B9\u30C6\u30E0", schema: ExternalSystemSchema },
+      { key: "bucs", layer: "rdra", prefix: "buc", file: "bucs.yaml", table: "bucs", label: "BUC", schema: BucSchema },
+      { key: "usecases", layer: "rdra", prefix: "uc", file: "usecases.yaml", table: "usecases", label: "\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9", schema: UsecaseSchema },
+      { key: "screens", layer: "rdra", prefix: "scr", file: "screens.yaml", table: "screens", label: "\u753B\u9762", schema: ScreenSchema },
+      { key: "events", layer: "rdra", prefix: "evt", file: "events.yaml", table: "events", label: "\u30A4\u30D9\u30F3\u30C8", schema: EventSchema },
+      { key: "information", layer: "rdra", prefix: "inf", file: "information.yaml", table: "information", label: "\u60C5\u5831", schema: InformationSchema },
+      { key: "states", layer: "rdra", prefix: "st", file: "states.yaml", table: "state_models", label: "\u72B6\u614B\u30E2\u30C7\u30EB", schema: StateModelSchema },
+      { key: "principles", layer: "rdra", prefix: "pr", file: "principles.yaml", table: "principles", label: "\u539F\u5247", schema: PrincipleSchema },
+      { key: "components", layer: "design", prefix: "comp", file: "components.yaml", table: "components", label: "\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8", schema: ComponentSchema },
+      { key: "tables", layer: "design", prefix: "tbl", file: "tables.yaml", table: "tables", label: "\u30C6\u30FC\u30D6\u30EB", schema: TableSchema },
+      { key: "decisions", layer: "design", prefix: "adr", file: "decisions.yaml", table: "decisions", label: "\u8A2D\u8A08\u5224\u65AD", schema: DecisionSchema }
     ];
   }
 });
@@ -20524,20 +20571,28 @@ function canonicalize(value) {
   }
   return value;
 }
-function canonicalModel(model) {
+function canonicalModel(model, kinds = KINDS) {
   const out = {};
-  for (const kind of KINDS) {
+  for (const kind of kinds) {
     out[kind.key] = [...model[kind.key]].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).map(canonicalize);
   }
   return out;
 }
-function modelHash(model) {
-  return "sha256:" + createHash("sha256").update(JSON.stringify(canonicalModel(model))).digest("hex");
+function hashOf(value) {
+  return "sha256:" + createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
+function modelHash(model) {
+  return hashOf(canonicalModel(model));
+}
+function rdraHash(model) {
+  return hashOf(canonicalModel(model, RDRA_KINDS));
+}
+var RDRA_KINDS;
 var init_hash = __esm({
   "src/model/hash.ts"() {
     "use strict";
     init_kinds();
+    RDRA_KINDS = KINDS.filter((k) => k.layer === "rdra");
   }
 });
 
@@ -27922,7 +27977,13 @@ var require_dist = __commonJS({
 
 // src/model/io.ts
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+function fileKey(kind) {
+  return kind.layer === "rdra" ? kind.file : `design/${kind.file}`;
+}
+function repoPath(kind) {
+  return `${kind.layer === "rdra" ? RDRA_DIR : DESIGN_DIR}/${kind.file}`;
+}
 function lineOf(doc, counter, path) {
   for (let n = path.length; n > 0; n--) {
     const node2 = doc.getIn(path.slice(0, n), true);
@@ -27933,23 +27994,24 @@ function lineOf(doc, counter, path) {
 function parseModel(files) {
   const model = emptyModel();
   for (const kind of KINDS) {
-    const text = files[kind.file];
+    const key = fileKey(kind);
+    const text = files[key];
     if (text === void 0 || text.trim() === "") continue;
     const counter = new import_yaml.LineCounter();
     const doc = (0, import_yaml.parseDocument)(text, { lineCounter: counter });
     if (doc.errors.length > 0) {
       const first = doc.errors[0];
-      throw new ModelParseError(kind.file, first.linePos?.[0]?.line ?? null, first.message);
+      throw new ModelParseError(key, first.linePos?.[0]?.line ?? null, first.message);
     }
     const data = doc.toJS();
     if (data === null || data === void 0) continue;
-    if (!Array.isArray(data)) throw new ModelParseError(kind.file, 1, "\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F\u30EA\u30B9\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
+    if (!Array.isArray(data)) throw new ModelParseError(key, 1, "\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F\u30EA\u30B9\u30C8\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     data.forEach((raw, i) => {
       const result = kind.schema.safeParse(raw);
       if (!result.success) {
         const issue2 = result.error.issues[0];
         const path = [i, ...issue2.path.filter((p) => typeof p !== "symbol")];
-        throw new ModelParseError(kind.file, lineOf(doc, counter, path), `[${path.join(".")}] ${issue2.message}`);
+        throw new ModelParseError(key, lineOf(doc, counter, path), `[${path.join(".")}] ${issue2.message}`);
       }
       model[kind.key].push(result.data);
     });
@@ -27973,7 +28035,7 @@ function serializeModel(model) {
   const files = {};
   for (const kind of KINDS) {
     const items = model[kind.key];
-    files[kind.file] = items.length === 0 ? "[]\n" : (0, import_yaml.stringify)(prune(items), { lineWidth: 0 });
+    files[fileKey(kind)] = items.length === 0 ? "[]\n" : (0, import_yaml.stringify)(prune(items), { lineWidth: 0 });
   }
   return files;
 }
@@ -27981,7 +28043,7 @@ async function readModelFiles(repoRoot) {
   const files = {};
   for (const kind of KINDS) {
     try {
-      files[kind.file] = await readFile(join(repoRoot, RDRA_DIR, kind.file), "utf8");
+      files[fileKey(kind)] = await readFile(join(repoRoot, repoPath(kind)), "utf8");
     } catch (e) {
       if (e.code !== "ENOENT") throw e;
     }
@@ -27989,21 +28051,25 @@ async function readModelFiles(repoRoot) {
   return files;
 }
 async function writeModelFiles(repoRoot, files, previous) {
-  const changed = Object.keys(files).filter((file2) => previous[file2] !== files[file2]);
-  if (changed.length === 0) return [];
-  await mkdir(join(repoRoot, RDRA_DIR), { recursive: true });
-  for (const file2 of changed) {
-    await writeFile(join(repoRoot, RDRA_DIR, file2), files[file2], "utf8");
+  const skip = (key) => key.startsWith("design/") && previous[key] === void 0 && files[key] === EMPTY_FILE;
+  const changed = Object.keys(files).filter((key) => previous[key] !== files[key] && !skip(key));
+  for (const key of changed) {
+    const path = join(repoRoot, PATH_OF_KEY.get(key));
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, files[key], "utf8");
   }
   return changed;
 }
-var import_yaml, RDRA_DIR, ModelParseError;
+var import_yaml, RDRA_DIR, DESIGN_DIR, PATH_OF_KEY, EMPTY_FILE, ModelParseError;
 var init_io = __esm({
   "src/model/io.ts"() {
     "use strict";
     import_yaml = __toESM(require_dist(), 1);
     init_kinds();
     RDRA_DIR = "docs/rdra";
+    DESIGN_DIR = "docs/design";
+    PATH_OF_KEY = new Map(KINDS.map((k) => [fileKey(k), repoPath(k)]));
+    EMPTY_FILE = "[]\n";
     ModelParseError = class extends Error {
       constructor(file2, line, detail) {
         super(`${file2}${line ? `:${line}` : ""}: ${detail}`);
@@ -28057,8 +28123,8 @@ async function resolveBaseCommit(repoRoot) {
 async function readModelFilesAt(repoRoot, commit) {
   const files = {};
   for (const kind of KINDS) {
-    const r = await git(repoRoot, ["show", `${commit}:${RDRA_DIR}/${kind.file}`]);
-    if (r.ok) files[kind.file] = r.stdout;
+    const r = await git(repoRoot, ["show", `${commit}:${repoPath(kind)}`]);
+    if (r.ok) files[fileKey(kind)] = r.stdout;
   }
   return files;
 }
@@ -28076,6 +28142,24 @@ var init_git = __esm({
   }
 });
 
+// src/base-diff.ts
+async function diffAgainstBase(repoRoot, model) {
+  const base = await resolveBaseCommit(repoRoot);
+  if (!base) return { base: null, changes: [] };
+  const baseModel = parseModel(await readModelFilesAt(repoRoot, base));
+  return { base, changes: diffModels(baseModel, model) };
+}
+var NO_BASE_MESSAGE;
+var init_base_diff = __esm({
+  "src/base-diff.ts"() {
+    "use strict";
+    init_diff();
+    init_git();
+    init_io();
+    NO_BASE_MESSAGE = "\u5DEE\u5206\u306E\u57FA\u70B9\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002develop \u30D6\u30E9\u30F3\u30C1\uFF08\u307E\u305F\u306F git config gitflow.branch.<branch>.base\uFF09\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044";
+  }
+});
+
 // src/feature.ts
 import { join as join2 } from "node:path";
 function invalidReason(branch, prefix, id) {
@@ -28089,14 +28173,20 @@ async function resolveFeature(repoRoot) {
   if (!branch.startsWith(prefix)) return null;
   const id = branch.slice(prefix.length);
   if (!FEATURE_ID.test(id)) return { invalid: true, branch, reason: invalidReason(branch, prefix, id) };
-  return { id, branch, reviewFile: join2(repoRoot, REVIEWS_DIR, `${id}.json`) };
+  return {
+    id,
+    branch,
+    reviewFile: join2(repoRoot, REVIEWS_DIR, `${id}.json`),
+    designReviewFile: join2(repoRoot, DESIGN_REVIEWS_DIR, `${id}.json`)
+  };
 }
-var REVIEWS_DIR, FEATURE_ID, isInvalidFeature;
+var REVIEWS_DIR, DESIGN_REVIEWS_DIR, FEATURE_ID, isInvalidFeature;
 var init_feature = __esm({
   "src/feature.ts"() {
     "use strict";
     init_git();
     REVIEWS_DIR = "docs/rdra/reviews";
+    DESIGN_REVIEWS_DIR = "docs/design/reviews";
     FEATURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
     isInvalidFeature = (f) => f !== null && "invalid" in f;
   }
@@ -28105,7 +28195,7 @@ var init_feature = __esm({
 // src/review.ts
 import { randomBytes } from "node:crypto";
 import { mkdir as mkdir2, readFile as readFile2, rename, rm, writeFile as writeFile2 } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname as dirname2 } from "node:path";
 function emptyReview() {
   return { status: "none", approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
 }
@@ -28122,7 +28212,7 @@ async function readReview(file2) {
   return { ...emptyReview(), ...data };
 }
 async function writeReview(file2, record2) {
-  await mkdir2(dirname(file2), { recursive: true });
+  await mkdir2(dirname2(file2), { recursive: true });
   const tmp = `${file2}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
   try {
     await writeFile2(tmp, JSON.stringify(record2, null, 2) + "\n", "utf8");
@@ -28162,13 +28252,290 @@ var init_review = __esm({
   }
 });
 
+// src/model/relations.ts
+function relationSourcePrefix(kind) {
+  return kind.split(".")[0];
+}
+function elementFields(element) {
+  return element;
+}
+function relationsOf(model) {
+  const relations = [];
+  for (const kind of RELATION_KINDS) {
+    const { field, shape } = RELATION_FIELDS[kind];
+    const source = KINDS.find((k) => k.prefix === relationSourcePrefix(kind));
+    if (!source) continue;
+    for (const element of model[source.key]) {
+      const value = elementFields(element)[field];
+      if (shape === "ids") {
+        for (const to of value) relations.push({ from: element.id, to, kind, attrs: {} });
+      } else if (shape === "refs") {
+        for (const entry of value) {
+          const { ref, ...attrs } = entry;
+          relations.push({ from: element.id, to: ref, kind, attrs });
+        }
+      } else if (typeof value === "string") {
+        relations.push({ from: element.id, to: value, kind, attrs: {} });
+      }
+    }
+  }
+  return relations;
+}
+function parseTransitionRef(ref) {
+  const m = transitionPattern.exec(ref);
+  return m ? { model: m[1], from: m[2], to: m[3] } : null;
+}
+function formatTransitionRef(t) {
+  return `${t.model}:${t.from}->${t.to}`;
+}
+var RELATION_KINDS, RELATION_FIELDS, RELATION_TARGET_PREFIXES, transitionPattern;
+var init_relations = __esm({
+  "src/model/relations.ts"() {
+    "use strict";
+    init_kinds();
+    RELATION_KINDS = [
+      "buc.actor",
+      "buc.usecase",
+      "uc.actor",
+      "uc.screen",
+      "uc.event",
+      "uc.information",
+      "uc.transition",
+      "evt.source",
+      "evt.target",
+      "inf.related",
+      "st.information",
+      "pr.scope",
+      "comp.depends",
+      "comp.realizes",
+      "comp.holds",
+      "tbl.store",
+      "tbl.realizes",
+      "tbl.state",
+      "tbl.related",
+      "adr.affects",
+      "adr.basis",
+      "adr.superseded-by"
+    ];
+    RELATION_FIELDS = {
+      "buc.actor": { field: "actors", shape: "ids" },
+      "buc.usecase": { field: "usecases", shape: "ids" },
+      "uc.actor": { field: "actors", shape: "ids" },
+      "uc.screen": { field: "screens", shape: "ids" },
+      "uc.event": { field: "events", shape: "ids" },
+      "uc.information": { field: "information", shape: "refs" },
+      "uc.transition": { field: "transitions", shape: "ids" },
+      "evt.source": { field: "source", shape: "single" },
+      "evt.target": { field: "target", shape: "single" },
+      "inf.related": { field: "related", shape: "refs" },
+      "st.information": { field: "information", shape: "single" },
+      "pr.scope": { field: "scope", shape: "ids" },
+      "comp.depends": { field: "dependsOn", shape: "refs" },
+      "comp.realizes": { field: "realizes", shape: "ids" },
+      "comp.holds": { field: "holds", shape: "ids" },
+      "tbl.store": { field: "store", shape: "single" },
+      "tbl.realizes": { field: "realizes", shape: "ids" },
+      "tbl.state": { field: "states", shape: "ids" },
+      "tbl.related": { field: "related", shape: "refs" },
+      "adr.affects": { field: "affects", shape: "ids" },
+      "adr.basis": { field: "basis", shape: "ids" },
+      "adr.superseded-by": { field: "supersededBy", shape: "single" }
+    };
+    RELATION_TARGET_PREFIXES = {
+      "buc.actor": ["act"],
+      "buc.usecase": ["uc"],
+      "uc.actor": ["act"],
+      "uc.screen": ["scr"],
+      "uc.event": ["evt"],
+      "uc.information": ["inf"],
+      "uc.transition": ["st"],
+      "evt.source": ["act", "ext"],
+      "evt.target": ["act", "ext"],
+      "inf.related": ["inf"],
+      "st.information": ["inf"],
+      "pr.scope": ["act", "ext", "buc", "uc", "scr", "inf", "st"],
+      "comp.depends": ["comp"],
+      "comp.realizes": ["ext", "pr"],
+      "comp.holds": ["inf"],
+      "tbl.store": ["comp"],
+      "tbl.realizes": ["inf"],
+      "tbl.state": ["st"],
+      "tbl.related": ["tbl"],
+      "adr.affects": ["comp", "tbl"],
+      "adr.basis": ["pr"],
+      "adr.superseded-by": ["adr"]
+    };
+    transitionPattern = new RegExp(`^(st\\.${SLUG}):(${SLUG})->(${SLUG})$`);
+  }
+});
+
+// src/validate.ts
+function hasErrors(issues) {
+  return issues.some((i) => i.level === "error");
+}
+function validate2(model, opts = {}) {
+  const issues = [];
+  const error62 = (code, message, elementId) => issues.push({ level: "error", code, message, elementId });
+  const warn = (code, message, elementId) => issues.push({ level: "warning", code, message, elementId });
+  const ids = /* @__PURE__ */ new Set();
+  for (const kind of KINDS) {
+    for (const element of model[kind.key]) {
+      if (ids.has(element.id)) error62("duplicate-id", `ID ${element.id} \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059`, element.id);
+      ids.add(element.id);
+    }
+  }
+  const stateModels = new Map(model.states.map((s) => [s.id, s]));
+  for (const sm of model.states) {
+    const stateIds = /* @__PURE__ */ new Set();
+    for (const state of sm.states) {
+      if (stateIds.has(state.id)) error62("duplicate-state", `${sm.id} \u306E\u72B6\u614B ${state.id} \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059`, sm.id);
+      stateIds.add(state.id);
+    }
+    for (const t of sm.transitions) {
+      if (!stateIds.has(t.from) || !stateIds.has(t.to)) {
+        error62("unknown-state", `${sm.id} \u306E\u9077\u79FB ${t.from}->${t.to} \u304C\u672A\u5B9A\u7FA9\u306E\u72B6\u614B\u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`, sm.id);
+      }
+    }
+  }
+  for (const r of relationsOf(model)) {
+    if (r.kind === "uc.transition") {
+      const t = parseTransitionRef(r.to);
+      if (!t) {
+        error62("bad-transition-ref", `${r.from} \u306E\u9077\u79FB\u53C2\u7167 ${r.to} \u306E\u5F62\u5F0F\u304C\u4E0D\u6B63\u3067\u3059\uFF08st.<\u30E2\u30C7\u30EB>:<\u72B6\u614B>-><\u72B6\u614B>\uFF09`, r.from);
+        continue;
+      }
+      const sm = stateModels.get(t.model);
+      if (!sm) {
+        error62("dangling-ref", `${r.from} \u304C\u5B58\u5728\u3057\u306A\u3044\u72B6\u614B\u30E2\u30C7\u30EB ${t.model} \u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`, r.from);
+      } else if (!sm.transitions.some((x) => x.from === t.from && x.to === t.to)) {
+        error62("unknown-transition", `${r.from} \u304C ${t.model} \u306B\u5B58\u5728\u3057\u306A\u3044\u9077\u79FB ${t.from}->${t.to} \u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`, r.from);
+      }
+      continue;
+    }
+    const allowed = RELATION_TARGET_PREFIXES[r.kind];
+    if (!allowed.includes(r.to.split(".")[0])) {
+      error62("wrong-kind-ref", `${r.from} \u306E ${r.kind} \u306B ${r.to} \u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\uFF08${allowed.join(" / ")} \u306E\u307F\uFF09`, r.from);
+      continue;
+    }
+    if (!ids.has(r.to)) error62("dangling-ref", `${r.from} \u304C\u5B58\u5728\u3057\u306A\u3044 ${r.to} \u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`, r.from);
+  }
+  const inBuc = new Set(model.bucs.flatMap((b) => b.usecases));
+  const usedInformation = new Set(model.usecases.flatMap((u) => u.information.map((i) => i.ref)));
+  const usedTransitions = new Set(model.usecases.flatMap((u) => u.transitions));
+  for (const uc of model.usecases) {
+    if (uc.screens.length === 0 && uc.events.length === 0) {
+      warn("usecase-without-io", `${uc.id} \u306B\u753B\u9762\u3082\u30A4\u30D9\u30F3\u30C8\u3082\u7D10\u3065\u3044\u3066\u3044\u307E\u305B\u3093`, uc.id);
+    }
+    if (!inBuc.has(uc.id)) warn("usecase-without-buc", `${uc.id} \u304C\u3069\u306E BUC \u306B\u3082\u5C5E\u3057\u3066\u3044\u307E\u305B\u3093`, uc.id);
+    const acIds = /* @__PURE__ */ new Set();
+    for (const ac of uc.acceptance) {
+      if (acIds.has(ac.id)) error62("duplicate-acceptance", `${uc.id} \u306E\u53D7\u3051\u5165\u308C\u6761\u4EF6 ${ac.id} \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059`, uc.id);
+      acIds.add(ac.id);
+      if (!ac.when.trim() || !ac.then.trim()) {
+        error62("empty-acceptance", `${uc.id} \u306E\u53D7\u3051\u5165\u308C\u6761\u4EF6 ${ac.id} \u306E when / then \u304C\u7A7A\u3067\u3059`, uc.id);
+      }
+    }
+  }
+  for (const info of model.information) {
+    if (!usedInformation.has(info.id)) warn("unused-information", `${info.id} \u3092\u6271\u3046\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u304C\u3042\u308A\u307E\u305B\u3093`, info.id);
+  }
+  for (const sm of model.states) {
+    for (const t of sm.transitions) {
+      const ref = formatTransitionRef({ model: sm.id, from: t.from, to: t.to });
+      if (!usedTransitions.has(ref)) warn("unused-transition", `${ref} \u3092\u8D77\u3053\u3059\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u304C\u3042\u308A\u307E\u305B\u3093`, sm.id);
+    }
+  }
+  for (const p of model.principles) {
+    if (p.level === "must" && !p.description?.trim()) {
+      warn("principle-without-description", `${p.id} \u306F MUST \u3067\u3059\u304C\u3001\u4F55\u3092\u6E80\u305F\u305B\u3070\u5B88\u3063\u305F\u3053\u3068\u306B\u306A\u308B\u304B\uFF08\u8AAC\u660E\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, p.id);
+    }
+  }
+  const related = new Set(relationsOf(model).flatMap((r) => [r.from, r.to]));
+  const checkDoc = (id, doc) => {
+    if (doc && opts.fileExists && !opts.fileExists(doc)) warn("missing-doc", `${id} \u306E doc ${doc} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093`, id);
+  };
+  const components = new Map(model.components.map((c) => [c.id, c]));
+  for (const c of model.components) {
+    if (!related.has(c.id)) warn("isolated-component", `${c.id} \u306F\u3069\u306E\u8981\u7D20\u3068\u3082\u95A2\u4FC2\u3057\u3066\u3044\u307E\u305B\u3093`, c.id);
+    checkDoc(c.id, c.doc);
+  }
+  for (const t of model.tables) {
+    const store = components.get(t.store);
+    if (store && store.type !== "datastore") {
+      error62("table-store-not-datastore", `${t.id} \u306E\u7F6E\u304D\u5834\u6240 ${t.store} \u306F datastore \u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF08type: ${store.type}\uFF09`, t.id);
+    }
+    for (const id of t.states) {
+      const sm = stateModels.get(id);
+      if (sm && (!sm.information || !t.realizes.includes(sm.information))) {
+        error62("table-state-mismatch", `${t.id} \u306E\u72B6\u614B ${id} \u306F\u3001${t.id} \u304C\u5B9F\u73FE\u3059\u308B\u60C5\u5831\u306E\u72B6\u614B\u30E2\u30C7\u30EB\u3067\u306F\u3042\u308A\u307E\u305B\u3093`, t.id);
+      }
+    }
+    checkDoc(t.id, t.doc);
+  }
+  const decisions = new Map(model.decisions.map((d) => [d.id, d]));
+  for (const d of model.decisions) {
+    if (d.status === "superseded" && !d.supersededBy) {
+      error62("decision-without-successor", `${d.id} \u306F superseded \u3067\u3059\u304C\u3001\u5F8C\u7D99\uFF08supersededBy\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, d.id);
+    }
+    if (d.supersededBy && decisions.get(d.supersededBy)?.status === "superseded") {
+      error62("decision-successor-superseded", `${d.id} \u306E\u5F8C\u7D99 ${d.supersededBy} \u3082 superseded \u3067\u3059\u3002\u6709\u52B9\u306A\u5224\u65AD\u3092\u6307\u3057\u3066\u304F\u3060\u3055\u3044`, d.id);
+    }
+  }
+  return issues;
+}
+function validateDesignChanges(model, changes) {
+  const issues = [];
+  const error62 = (code, message, elementId) => issues.push({ level: "error", code, message, elementId });
+  const inTables = new Set(model.tables.flatMap((t) => t.realizes));
+  const held = new Set(model.components.flatMap((c) => c.holds));
+  const realizedByComponents = new Set(model.components.flatMap((c) => c.realizes));
+  for (const id of liveIds(changes, "externalSystems")) {
+    if (!realizedByComponents.has(id)) error62("external-system-not-realized", `${id} \u3068\u9023\u643A\u3059\u308B\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8\uFF08realizes\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, id);
+  }
+  for (const id of liveIds(changes, "information")) {
+    if (!inTables.has(id) && !held.has(id)) {
+      error62("information-not-realized", `${id} \u3092\u4FDD\u5B58\u3059\u308B\u30C6\u30FC\u30D6\u30EB\u3082\u3001\u4FDD\u6301\u3059\u308B\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8\uFF08holds\uFF09\u3082\u3042\u308A\u307E\u305B\u3093`, id);
+    }
+  }
+  for (const id of liveIds(changes, "states")) {
+    const info = model.states.find((s) => s.id === id)?.information;
+    if (!info) continue;
+    const tables = model.tables.filter((t) => t.realizes.includes(info));
+    if (tables.length > 0 && !tables.some((t) => t.states.includes(id))) {
+      error62("state-not-stored", `${id} \u3092\u72B6\u614B\u3068\u3057\u3066\u6301\u3064\u30C6\u30FC\u30D6\u30EB\u304C\u3042\u308A\u307E\u305B\u3093\uFF08${tables.map((t) => t.id).join(", ")} \u306E states \u306B\u52A0\u3048\u3066\u304F\u3060\u3055\u3044\uFF09`, id);
+    }
+  }
+  const grounded = /* @__PURE__ */ new Set([...realizedByComponents, ...model.decisions.flatMap((d) => d.basis)]);
+  for (const id of liveIds(changes, "principles")) {
+    const p = model.principles.find((x) => x.id === id);
+    if (p && p.category === "technology" && p.level === "must" && !grounded.has(id)) {
+      issues.push({
+        level: "warning",
+        code: "technology-principle-not-realized",
+        message: `${id} \u3092\u5B9F\u73FE\u3059\u308B\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8\uFF08realizes\uFF09\u3082\u3001\u6839\u62E0\u306B\u3059\u308B\u8A2D\u8A08\u5224\u65AD\uFF08basis\uFF09\u3082\u3042\u308A\u307E\u305B\u3093`,
+        elementId: id
+      });
+    }
+  }
+  return issues;
+}
+var liveIds;
+var init_validate = __esm({
+  "src/validate.ts"() {
+    "use strict";
+    init_kinds();
+    init_relations();
+    liveIds = (changes, kind) => changes.filter((c) => c.kind === kind && c.type !== "removed").map((c) => c.id);
+  }
+});
+
 // src/approval.ts
 import { relative } from "node:path";
-async function changedSinceApproval(repo, reviewFile, current) {
+async function changedSinceApproval(repo, reviewFile, current, layer) {
   const commit = await lastCommitTouching(repo, relative(repo, reviewFile));
   if (!commit) return void 0;
   try {
-    return diffModels(parseModel(await readModelFilesAt(repo, commit)), current).map((c) => `${c.type} ${c.id}`);
+    return diffModels(parseModel(await readModelFilesAt(repo, commit)), current).filter((c) => !layer || kindDef(c.kind).layer === layer).map((c) => `${c.type} ${c.id}`);
   } catch {
     return void 0;
   }
@@ -28190,24 +28557,58 @@ async function checkFeatureApproval(repo) {
   } catch (e) {
     return { state: "error", message: `\u627F\u8A8D\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`, featureId: feature.id };
   }
-  const state = approvalState(review, modelHash(model));
-  const result = { state: state.state, message: APPROVAL_MESSAGES[state.state], model, featureId: feature.id };
+  const state = approvalState(review, rdraHash(model));
+  const result = { state: state.state, message: APPROVAL_MESSAGES[state.state], model, featureId: feature.id, feature };
   if (state.state === "stale") {
-    const changed = await changedSinceApproval(repo, feature.reviewFile, model);
+    const changed = await changedSinceApproval(repo, feature.reviewFile, model, "rdra");
     if (changed) result.changed = changed;
   }
   return result;
 }
-var APPROVAL_MESSAGES;
+function designRequired(model, changes) {
+  return changes.some((c) => kindDef(c.kind).layer === "design") || hasErrors(validateDesignChanges(model, changes));
+}
+async function checkDesignApproval(repo, feature, model) {
+  let review;
+  try {
+    review = await readReview(feature.designReviewFile);
+  } catch (e) {
+    return { state: "error", message: `\u8A2D\u8A08\u306E\u627F\u8A8D\u8A18\u9332\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`, required: true };
+  }
+  const state = approvalState(review, modelHash(model));
+  if (state.state === "approved") return { state: "approved", message: DESIGN_APPROVAL_MESSAGES.approved, required: true };
+  let diff;
+  try {
+    diff = await diffAgainstBase(repo, model);
+  } catch (e) {
+    if (!(e instanceof ModelParseError)) throw e;
+    return { state: "error", message: `\u5206\u5C90\u70B9\u306E\u30E2\u30C7\u30EB\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`, required: true };
+  }
+  if (!diff.base) return { state: "error", message: NO_BASE_MESSAGE, required: true };
+  const required2 = designRequired(model, diff.changes);
+  if (!required2 && state.state !== "pending") {
+    return { state: "not-required", message: DESIGN_APPROVAL_MESSAGES["not-required"], required: required2 };
+  }
+  const result = { state: state.state, message: DESIGN_APPROVAL_MESSAGES[state.state], required: required2 };
+  if (state.state === "stale") {
+    const changed = await changedSinceApproval(repo, feature.designReviewFile, model);
+    if (changed) result.changed = changed;
+  }
+  return result;
+}
+var APPROVAL_MESSAGES, DESIGN_APPROVAL_MESSAGES;
 var init_approval = __esm({
   "src/approval.ts"() {
     "use strict";
+    init_base_diff();
     init_diff();
     init_feature();
     init_git();
     init_hash();
     init_io();
+    init_kinds();
     init_review();
+    init_validate();
     APPROVAL_MESSAGES = {
       none: "RDRA \u306E\u30EC\u30D3\u30E5\u30FC\u304C\u307E\u3060\u4F9D\u983C\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002/rdra \u3067\u30E2\u30C7\u30EB\u3092\u4F5C\u6210\u3057\u3001\u30EC\u30D3\u30E5\u30FC\u3092\u5B8C\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
       pending: "RDRA \u306E\u30EC\u30D3\u30E5\u30FC\u304C\u627F\u8A8D\u5F85\u3061\u3067\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u627F\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
@@ -28216,6 +28617,14 @@ var init_approval = __esm({
       approved: "RDRA \u306F\u627F\u8A8D\u6E08\u307F\u3067\u3059\u3002",
       outside: "feature \u30D6\u30E9\u30F3\u30C1\uFF08feature/*\uFF09\u306E\u5916\u3067\u3059\u3002"
     };
+    DESIGN_APPROVAL_MESSAGES = {
+      none: "\u8A2D\u8A08\u306E\u30EC\u30D3\u30E5\u30FC\u304C\u307E\u3060\u4F9D\u983C\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002/design \u3067\u8A2D\u8A08\u30E2\u30C7\u30EB\u3092\u4F5C\u6210\u3057\u3001\u30EC\u30D3\u30E5\u30FC\u3092\u5B8C\u4E86\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+      pending: "\u8A2D\u8A08\u306E\u30EC\u30D3\u30E5\u30FC\u304C\u627F\u8A8D\u5F85\u3061\u3067\u3059\u3002\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u627F\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+      rejected: "\u8A2D\u8A08\u304C\u5DEE\u3057\u623B\u3055\u308C\u3066\u3044\u307E\u3059\u3002/design \u3067\u30B3\u30E1\u30F3\u30C8\u306B\u5BFE\u5FDC\u3057\u3001\u518D\u5EA6\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+      stale: "\u627F\u8A8D\u5F8C\u306B RDRA \u307E\u305F\u306F\u8A2D\u8A08\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002/design \u3067\u518D\u30EC\u30D3\u30E5\u30FC\u3092\u53D7\u3051\u3066\u304F\u3060\u3055\u3044\u3002",
+      approved: "\u8A2D\u8A08\u306F\u627F\u8A8D\u6E08\u307F\u3067\u3059\u3002",
+      "not-required": "\u3053\u306E feature \u306B\u306F\u8A2D\u8A08\u306E\u5909\u66F4\u304C\u306A\u3044\u305F\u3081\u3001\u8A2D\u8A08\u306E\u627F\u8A8D\u306F\u4E0D\u8981\u3067\u3059\u3002"
+    };
   }
 });
 
@@ -28223,7 +28632,7 @@ var init_approval = __esm({
 import { createHash as createHash2, randomBytes as randomBytes2 } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir as mkdir3, readFile as readFile3, rename as rename2, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname as dirname2, join as join3 } from "node:path";
+import { dirname as dirname3, join as join3 } from "node:path";
 async function featurePlans(repoRoot, base) {
   const r = await git(repoRoot, ["diff", "-z", "--name-only", "--diff-filter=AMR", `${base}..HEAD`, "--", PLANS_DIR]);
   if (!r.ok) return [];
@@ -28249,8 +28658,8 @@ function markerPath(repoRoot, featureId) {
 }
 async function writeMarker(repoRoot, featureId, marker) {
   const file2 = markerPath(repoRoot, featureId);
-  await mkdir3(dirname2(file2), { recursive: true });
-  const ignore = join3(dirname2(file2), ".gitignore");
+  await mkdir3(dirname3(file2), { recursive: true });
+  const ignore = join3(dirname3(file2), ".gitignore");
   if (!existsSync(ignore)) await writeFile3(ignore, "*\n", "utf8");
   const tmp = `${file2}.tmp-${process.pid}-${randomBytes2(6).toString("hex")}`;
   try {
@@ -28289,10 +28698,9 @@ async function gateSkill(repoRoot, skill) {
   if (!GATED_SKILLS.has(name)) return allow;
   const approval = await checkFeatureApproval(repoRoot);
   if (approval.state === "outside") return allow;
-  if (approval.state !== "approved") {
-    const changed = approval.changed?.length ? ` \u5909\u66F4\u3055\u308C\u305F\u8981\u7D20: ${approval.changed.join(", ")}` : "";
-    return deny(approval.message + changed);
-  }
+  if (approval.state !== "approved") return deny(approval.message + changedNote(approval.changed));
+  const design = await checkDesignApproval(repoRoot, approval.feature, approval.model);
+  if (design.state !== "approved" && design.state !== "not-required") return deny(design.message + changedNote(design.changed));
   if (!EXECUTION_SKILLS.has(name)) return allow;
   const marker = await readMarker(repoRoot, approval.featureId);
   if (!marker) return deny("/trace \u304C\u307E\u3060\u901A\u3063\u3066\u3044\u307E\u305B\u3093\u3002\u8A08\u753B\u3092 commit \u3057\u3001/trace \u3067 RDRA \u306E\u5DEE\u5206\u3092\u3059\u3079\u3066\u30AB\u30D0\u30FC\u3057\u3066\u3044\u308B\u3053\u3068\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
@@ -28306,12 +28714,14 @@ async function gateSkill(repoRoot, skill) {
 }
 function gatePath(file2) {
   const normalized = resolve(file2).split(sep).join("/");
-  if (normalized.includes("/docs/rdra/reviews/")) {
-    return deny("\u627F\u8A8D\u8A18\u9332\uFF08docs/rdra/reviews/\uFF09\u306F\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u304B\u3089\u306E\u307F\u66F4\u65B0\u3067\u304D\u307E\u3059\u3002\u627F\u8A8D\u30FB\u5DEE\u3057\u623B\u3057\u306F\u4EBA\u9593\u304C\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u884C\u3063\u3066\u304F\u3060\u3055\u3044\u3002");
+  if (REVIEW_DIRS.some((dir) => normalized.includes(dir))) {
+    return deny(
+      "\u627F\u8A8D\u8A18\u9332\uFF08docs/rdra/reviews/\u3001docs/design/reviews/\uFF09\u306F\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u304B\u3089\u306E\u307F\u66F4\u65B0\u3067\u304D\u307E\u3059\u3002\u627F\u8A8D\u30FB\u5DEE\u3057\u623B\u3057\u306F\u4EBA\u9593\u304C\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u884C\u3063\u3066\u304F\u3060\u3055\u3044\u3002"
+    );
   }
   return allow;
 }
-var PLAN_SKILLS, EXECUTION_SKILLS, GATED_SKILLS, allow, deny;
+var PLAN_SKILLS, EXECUTION_SKILLS, GATED_SKILLS, allow, deny, changedNote, REVIEW_DIRS;
 var init_gate = __esm({
   "src/gate.ts"() {
     "use strict";
@@ -28324,24 +28734,8 @@ var init_gate = __esm({
     GATED_SKILLS = /* @__PURE__ */ new Set([...PLAN_SKILLS, ...EXECUTION_SKILLS]);
     allow = { decision: "allow" };
     deny = (reason) => ({ decision: "deny", reason });
-  }
-});
-
-// src/base-diff.ts
-async function diffAgainstBase(repoRoot, model) {
-  const base = await resolveBaseCommit(repoRoot);
-  if (!base) return { base: null, changes: [] };
-  const baseModel = parseModel(await readModelFilesAt(repoRoot, base));
-  return { base, changes: diffModels(baseModel, model) };
-}
-var NO_BASE_MESSAGE;
-var init_base_diff = __esm({
-  "src/base-diff.ts"() {
-    "use strict";
-    init_diff();
-    init_git();
-    init_io();
-    NO_BASE_MESSAGE = "\u5DEE\u5206\u306E\u57FA\u70B9\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002develop \u30D6\u30E9\u30F3\u30C1\uFF08\u307E\u305F\u306F git config gitflow.branch.<branch>.base\uFF09\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044";
+    changedNote = (changed) => changed?.length ? ` \u5909\u66F4\u3055\u308C\u305F\u8981\u7D20: ${changed.join(", ")}` : "";
+    REVIEW_DIRS = ["/docs/rdra/reviews/", "/docs/design/reviews/"];
   }
 });
 
@@ -32238,185 +32632,8 @@ var init_layout = __esm({
   }
 });
 
-// src/model/relations.ts
-function relationSourcePrefix(kind) {
-  return kind.split(".")[0];
-}
-function elementFields(element) {
-  return element;
-}
-function relationsOf(model) {
-  const relations = [];
-  for (const kind of RELATION_KINDS) {
-    const { field, shape } = RELATION_FIELDS[kind];
-    const source = KINDS.find((k) => k.prefix === relationSourcePrefix(kind));
-    if (!source) continue;
-    for (const element of model[source.key]) {
-      const value = elementFields(element)[field];
-      if (shape === "ids") {
-        for (const to of value) relations.push({ from: element.id, to, kind, attrs: {} });
-      } else if (shape === "refs") {
-        for (const entry of value) {
-          const { ref, ...attrs } = entry;
-          relations.push({ from: element.id, to: ref, kind, attrs });
-        }
-      } else if (typeof value === "string") {
-        relations.push({ from: element.id, to: value, kind, attrs: {} });
-      }
-    }
-  }
-  return relations;
-}
-function parseTransitionRef(ref) {
-  const m = transitionPattern.exec(ref);
-  return m ? { model: m[1], from: m[2], to: m[3] } : null;
-}
-function formatTransitionRef(t) {
-  return `${t.model}:${t.from}->${t.to}`;
-}
-var RELATION_KINDS, RELATION_FIELDS, RELATION_TARGET_PREFIXES, transitionPattern;
-var init_relations = __esm({
-  "src/model/relations.ts"() {
-    "use strict";
-    init_kinds();
-    RELATION_KINDS = [
-      "buc.actor",
-      "buc.usecase",
-      "uc.actor",
-      "uc.screen",
-      "uc.event",
-      "uc.information",
-      "uc.transition",
-      "evt.source",
-      "evt.target",
-      "inf.related",
-      "st.information",
-      "pr.scope"
-    ];
-    RELATION_FIELDS = {
-      "buc.actor": { field: "actors", shape: "ids" },
-      "buc.usecase": { field: "usecases", shape: "ids" },
-      "uc.actor": { field: "actors", shape: "ids" },
-      "uc.screen": { field: "screens", shape: "ids" },
-      "uc.event": { field: "events", shape: "ids" },
-      "uc.information": { field: "information", shape: "refs" },
-      "uc.transition": { field: "transitions", shape: "ids" },
-      "evt.source": { field: "source", shape: "single" },
-      "evt.target": { field: "target", shape: "single" },
-      "inf.related": { field: "related", shape: "refs" },
-      "st.information": { field: "information", shape: "single" },
-      "pr.scope": { field: "scope", shape: "ids" }
-    };
-    RELATION_TARGET_PREFIXES = {
-      "buc.actor": ["act"],
-      "buc.usecase": ["uc"],
-      "uc.actor": ["act"],
-      "uc.screen": ["scr"],
-      "uc.event": ["evt"],
-      "uc.information": ["inf"],
-      "uc.transition": ["st"],
-      "evt.source": ["act", "ext"],
-      "evt.target": ["act", "ext"],
-      "inf.related": ["inf"],
-      "st.information": ["inf"],
-      "pr.scope": ["act", "ext", "buc", "uc", "scr", "inf", "st"]
-    };
-    transitionPattern = new RegExp(`^(st\\.${SLUG}):(${SLUG})->(${SLUG})$`);
-  }
-});
-
-// src/validate.ts
-function hasErrors(issues) {
-  return issues.some((i) => i.level === "error");
-}
-function validate2(model) {
-  const issues = [];
-  const error62 = (code, message, elementId) => issues.push({ level: "error", code, message, elementId });
-  const warn = (code, message, elementId) => issues.push({ level: "warning", code, message, elementId });
-  const ids = /* @__PURE__ */ new Set();
-  for (const kind of KINDS) {
-    for (const element of model[kind.key]) {
-      if (ids.has(element.id)) error62("duplicate-id", `ID ${element.id} \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059`, element.id);
-      ids.add(element.id);
-    }
-  }
-  const stateModels = new Map(model.states.map((s) => [s.id, s]));
-  for (const sm of model.states) {
-    const stateIds = /* @__PURE__ */ new Set();
-    for (const state of sm.states) {
-      if (stateIds.has(state.id)) error62("duplicate-state", `${sm.id} \u306E\u72B6\u614B ${state.id} \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059`, sm.id);
-      stateIds.add(state.id);
-    }
-    for (const t of sm.transitions) {
-      if (!stateIds.has(t.from) || !stateIds.has(t.to)) {
-        error62("unknown-state", `${sm.id} \u306E\u9077\u79FB ${t.from}->${t.to} \u304C\u672A\u5B9A\u7FA9\u306E\u72B6\u614B\u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`, sm.id);
-      }
-    }
-  }
-  for (const r of relationsOf(model)) {
-    if (r.kind === "uc.transition") {
-      const t = parseTransitionRef(r.to);
-      if (!t) {
-        error62("bad-transition-ref", `${r.from} \u306E\u9077\u79FB\u53C2\u7167 ${r.to} \u306E\u5F62\u5F0F\u304C\u4E0D\u6B63\u3067\u3059\uFF08st.<\u30E2\u30C7\u30EB>:<\u72B6\u614B>-><\u72B6\u614B>\uFF09`, r.from);
-        continue;
-      }
-      const sm = stateModels.get(t.model);
-      if (!sm) {
-        error62("dangling-ref", `${r.from} \u304C\u5B58\u5728\u3057\u306A\u3044\u72B6\u614B\u30E2\u30C7\u30EB ${t.model} \u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`, r.from);
-      } else if (!sm.transitions.some((x) => x.from === t.from && x.to === t.to)) {
-        error62("unknown-transition", `${r.from} \u304C ${t.model} \u306B\u5B58\u5728\u3057\u306A\u3044\u9077\u79FB ${t.from}->${t.to} \u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`, r.from);
-      }
-      continue;
-    }
-    const allowed = RELATION_TARGET_PREFIXES[r.kind];
-    if (!allowed.includes(r.to.split(".")[0])) {
-      error62("wrong-kind-ref", `${r.from} \u306E ${r.kind} \u306B ${r.to} \u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\uFF08${allowed.join(" / ")} \u306E\u307F\uFF09`, r.from);
-      continue;
-    }
-    if (!ids.has(r.to)) error62("dangling-ref", `${r.from} \u304C\u5B58\u5728\u3057\u306A\u3044 ${r.to} \u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`, r.from);
-  }
-  const inBuc = new Set(model.bucs.flatMap((b) => b.usecases));
-  const usedInformation = new Set(model.usecases.flatMap((u) => u.information.map((i) => i.ref)));
-  const usedTransitions = new Set(model.usecases.flatMap((u) => u.transitions));
-  for (const uc of model.usecases) {
-    if (uc.screens.length === 0 && uc.events.length === 0) {
-      warn("usecase-without-io", `${uc.id} \u306B\u753B\u9762\u3082\u30A4\u30D9\u30F3\u30C8\u3082\u7D10\u3065\u3044\u3066\u3044\u307E\u305B\u3093`, uc.id);
-    }
-    if (!inBuc.has(uc.id)) warn("usecase-without-buc", `${uc.id} \u304C\u3069\u306E BUC \u306B\u3082\u5C5E\u3057\u3066\u3044\u307E\u305B\u3093`, uc.id);
-    const acIds = /* @__PURE__ */ new Set();
-    for (const ac of uc.acceptance) {
-      if (acIds.has(ac.id)) error62("duplicate-acceptance", `${uc.id} \u306E\u53D7\u3051\u5165\u308C\u6761\u4EF6 ${ac.id} \u304C\u91CD\u8907\u3057\u3066\u3044\u307E\u3059`, uc.id);
-      acIds.add(ac.id);
-      if (!ac.when.trim() || !ac.then.trim()) {
-        error62("empty-acceptance", `${uc.id} \u306E\u53D7\u3051\u5165\u308C\u6761\u4EF6 ${ac.id} \u306E when / then \u304C\u7A7A\u3067\u3059`, uc.id);
-      }
-    }
-  }
-  for (const info of model.information) {
-    if (!usedInformation.has(info.id)) warn("unused-information", `${info.id} \u3092\u6271\u3046\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u304C\u3042\u308A\u307E\u305B\u3093`, info.id);
-  }
-  for (const sm of model.states) {
-    for (const t of sm.transitions) {
-      const ref = formatTransitionRef({ model: sm.id, from: t.from, to: t.to });
-      if (!usedTransitions.has(ref)) warn("unused-transition", `${ref} \u3092\u8D77\u3053\u3059\u30E6\u30FC\u30B9\u30B1\u30FC\u30B9\u304C\u3042\u308A\u307E\u305B\u3093`, sm.id);
-    }
-  }
-  for (const p of model.principles) {
-    if (p.level === "must" && !p.description?.trim()) {
-      warn("principle-without-description", `${p.id} \u306F MUST \u3067\u3059\u304C\u3001\u4F55\u3092\u6E80\u305F\u305B\u3070\u5B88\u3063\u305F\u3053\u3068\u306B\u306A\u308B\u304B\uFF08\u8AAC\u660E\uFF09\u304C\u3042\u308A\u307E\u305B\u3093`, p.id);
-    }
-  }
-  return issues;
-}
-var init_validate = __esm({
-  "src/validate.ts"() {
-    "use strict";
-    init_kinds();
-    init_relations();
-  }
-});
-
 // src/http.ts
+import { existsSync as existsSync2 } from "node:fs";
 import { readFile as readFile6 } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join as join6, normalize, sep as sep2 } from "node:path";
@@ -32465,11 +32682,11 @@ async function startHttp(deps, port = 0) {
       version: store.version,
       parseError: store.parseError?.message ?? null,
       model: store.model,
-      issues: validate2(store.model),
+      issues: validate2(store.model, { fileExists: (path) => existsSync2(join6(store.repoRoot, path)) }),
       layout: await readLayout(store.repoRoot),
       feature: feature?.id ?? null,
       review,
-      approval: review ? approvalState(review, store.version).state : "none"
+      approval: review ? approvalState(review, rdraHash(store.model)).state : "none"
     };
   }
   async function diff() {
@@ -32505,7 +32722,7 @@ async function startHttp(deps, port = 0) {
         throw new HttpError(422, "\u30A8\u30E9\u30FC\u304C\u6B8B\u3063\u3066\u3044\u308B\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093");
       }
       try {
-        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: store.version, now: now() });
+        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: rdraHash(store.model), now: now() });
         await writeReview(feature.reviewFile, next);
         return next;
       } catch (e) {
@@ -32595,6 +32812,7 @@ var init_http = __esm({
     init_base_diff();
     init_feature();
     init_layout();
+    init_hash();
     init_io();
     init_view_keys();
     init_review();
@@ -41770,6 +41988,7 @@ var init_mcp2 = __esm({
     init_zod();
     init_base_diff();
     init_feature();
+    init_hash();
     init_io();
     init_kinds();
     init_relations();
@@ -41853,6 +42072,14 @@ function remove(model, id) {
   model[found.kind.key].splice(found.index, 1);
   const incoming = relationsOf(model).filter((r) => pointsAt(r, id));
   for (const r of incoming) detach(model, r.kind, r.from, r.to);
+  for (const from of new Set(incoming.map((r) => r.from))) {
+    try {
+      reparse(model, from);
+    } catch (e) {
+      if (!(e instanceof OperationError)) throw e;
+      throw new OperationError(`${id} \u3092\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002${from} \u304C\u5FC5\u8981\u3068\u3057\u3066\u3044\u307E\u3059\uFF08\u5148\u306B ${from} \u3092\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\uFF09: ${e.message}`);
+    }
+  }
   return [...outgoing, ...incoming];
 }
 function link(model, relation, from, to, attrs = {}) {
@@ -41893,6 +42120,7 @@ function applyOperations(input2, ops) {
         if (!detach(model, op.relation, op.from, op.to)) {
           throw new OperationError(`${op.from} \u304B\u3089 ${op.to} \u3078\u306E ${op.relation} \u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
         }
+        reparse(model, op.from);
         break;
     }
   }
@@ -41915,7 +42143,7 @@ var init_operations = __esm({
 
 // src/store.ts
 import { EventEmitter } from "node:events";
-import { existsSync as existsSync2, watch } from "node:fs";
+import { existsSync as existsSync3, watch } from "node:fs";
 import { join as join7 } from "node:path";
 var issueKey, RdraStore;
 var init_store = __esm({
@@ -41939,7 +42167,7 @@ var init_store = __esm({
       currentVersion = modelHash(emptyModel());
       error = null;
       queue = Promise.resolve();
-      watcher = null;
+      watchers = /* @__PURE__ */ new Map();
       watching = false;
       reloadTimer = null;
       static async open(repoRoot) {
@@ -41979,16 +42207,19 @@ var init_store = __esm({
       }
       close() {
         this.watching = false;
-        this.watcher?.close();
-        this.watcher = null;
+        for (const watcher of this.watchers.values()) watcher.close();
+        this.watchers.clear();
         if (this.reloadTimer) clearTimeout(this.reloadTimer);
         this.reloadTimer = null;
       }
       startWatcher() {
-        if (!this.watching || this.watcher) return;
-        const dir = join7(this.repoRoot, RDRA_DIR);
-        if (!existsSync2(dir)) return;
-        this.watcher = watch(dir, () => this.scheduleReload());
+        if (!this.watching) return;
+        for (const relative2 of [RDRA_DIR, DESIGN_DIR]) {
+          if (this.watchers.has(relative2)) continue;
+          const dir = join7(this.repoRoot, relative2);
+          if (!existsSync3(dir)) continue;
+          this.watchers.set(relative2, watch(dir, () => this.scheduleReload()));
+        }
       }
       scheduleReload() {
         if (this.reloadTimer) clearTimeout(this.reloadTimer);
@@ -42064,10 +42295,10 @@ var init_store = __esm({
 });
 
 // src/server.ts
-import { dirname as dirname3, join as join8 } from "node:path";
+import { dirname as dirname4, join as join8 } from "node:path";
 import { fileURLToPath } from "node:url";
 function bundledWebRoot() {
-  return join8(dirname3(fileURLToPath(import.meta.url)), "web");
+  return join8(dirname4(fileURLToPath(import.meta.url)), "web");
 }
 var init_server3 = __esm({
   "src/server.ts"() {
@@ -42170,7 +42401,8 @@ async function runCli(argv, io = defaultIo) {
         "timeout-sec": { type: "string" },
         port: { type: "string" },
         skill: { type: "string" },
-        path: { type: "string" }
+        path: { type: "string" },
+        stage: { type: "string" }
       },
       strict: true
     }));
@@ -42206,8 +42438,15 @@ ${USAGE}`);
     return serve2(repo, Number(values.port ?? "0"), io);
   }
   if (command === "hash" && repo) {
+    const stage = values.stage ?? "rdra";
+    if (stage !== "rdra" && stage !== "design") {
+      io.err(`--stage \u306F rdra \u304B design \u3067\u3059
+${USAGE}`);
+      return 64;
+    }
     try {
-      io.out(modelHash(parseModel(await readModelFiles(repo))) + "\n");
+      const model = parseModel(await readModelFiles(repo));
+      io.out((stage === "design" ? modelHash(model) : rdraHash(model)) + "\n");
       return 0;
     } catch (e) {
       if (!(e instanceof ModelParseError)) throw e;
@@ -42240,7 +42479,7 @@ var init_cli = __esm({
       "  cli.js wait-review --repo <root> [--interval-ms 1000] [--timeout-sec 0]",
       "  cli.js trace --repo <root>",
       "  cli.js gate --repo <root> (--skill <name> | --path <file>)",
-      "  cli.js hash --repo <root>",
+      "  cli.js hash --repo <root> [--stage rdra|design]",
       "  cli.js serve --repo <root> [--port 0]",
       ""
     ].join("\n");
