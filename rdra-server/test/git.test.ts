@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DESIGN_DIR, RDRA_DIR } from "../src/model/io.js";
-import { REVIEWS_DIR, isInvalidFeature, resolveFeature } from "../src/feature.js";
+import { DESIGN_REVIEWS_DIR, REVIEWS_DIR, isInvalidFeature, resolveFeature } from "../src/feature.js";
 import { currentBranch, gitConfig, lastCommitTouching, readModelFilesAt, repoRootOf, resolveBaseCommit } from "../src/git.js";
 import { makeFeatureRepo, makeRepo, run, writeFiles } from "./helpers.js";
 
@@ -102,6 +102,7 @@ describe("resolveFeature", () => {
       id: "42-order-cancel",
       branch: "feature/42-order-cancel",
       reviewFile: join(repo, REVIEWS_DIR, "42-order-cancel.json"),
+      designReviewFile: join(repo, DESIGN_REVIEWS_DIR, "42-order-cancel.json"),
     });
   });
 

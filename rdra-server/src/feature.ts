@@ -2,11 +2,18 @@ import { join } from "node:path";
 import { currentBranch, gitConfig } from "./git.js";
 
 export const REVIEWS_DIR = "docs/rdra/reviews";
+export const DESIGN_REVIEWS_DIR = "docs/design/reviews";
+export type Stage = "rdra" | "design";
 
 export interface Feature {
   id: string;
   branch: string;
   reviewFile: string;
+  designReviewFile: string;
+}
+
+export function stageReviewFile(feature: Feature, stage: Stage): string {
+  return stage === "design" ? feature.designReviewFile : feature.reviewFile;
 }
 
 /** A branch with the feature prefix whose remainder is not a usable feature id. */
@@ -41,5 +48,10 @@ export async function resolveFeature(repoRoot: string): Promise<Feature | Invali
   if (!branch.startsWith(prefix)) return null;
   const id = branch.slice(prefix.length);
   if (!FEATURE_ID.test(id)) return { invalid: true, branch, reason: invalidReason(branch, prefix, id) };
-  return { id, branch, reviewFile: join(repoRoot, REVIEWS_DIR, `${id}.json`) };
+  return {
+    id,
+    branch,
+    reviewFile: join(repoRoot, REVIEWS_DIR, `${id}.json`),
+    designReviewFile: join(repoRoot, DESIGN_REVIEWS_DIR, `${id}.json`),
+  };
 }
