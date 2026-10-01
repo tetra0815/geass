@@ -28,7 +28,7 @@ describe("runTrace", () => {
       report: { ok: true, uncovered: [], applicable: ["pr.tdd"], covered: ["pr.audit", "uc.place-order#ac1", "uc.place-order#ac2"] },
     });
     const marker = await readMarker(repo, "001-demo");
-    expect(marker?.rdra_hash).toBe(modelHash(parseModel(await readModelFiles(repo))));
+    expect(marker?.design_hash).toBe(modelHash(parseModel(await readModelFiles(repo))));
     expect(Object.keys(marker!.plans)).toEqual([planPath]);
     expect(marker?.traced_at).toBe(T);
   });

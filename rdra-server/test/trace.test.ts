@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { diffModels } from "../src/diff.js";
 import type { Model } from "../src/model/kinds.js";
 import { knownRefs, matchTrace, parseCovers, traceTargets } from "../src/trace.js";
-import { sampleModel } from "./fixtures.js";
+import { sampleModel, sampleFullModel } from "./fixtures.js";
 
 function baseModel(): Model {
   const m = sampleModel();
@@ -54,6 +54,19 @@ describe("traceTargets", () => {
     head.usecases = head.usecases.filter((u) => u.id !== "uc.browse");
     head.principles.find((p) => p.id === "pr.fast")!.name = "もっと速い";
     expect(traceTargets(head, diffModels(base, head)).required).toEqual([]);
+  });
+
+  it("requires every added, changed or removed component and table, but not decisions", () => {
+    const base = sampleFullModel();
+    const head = sampleFullModel();
+    head.components = head.components.filter((c) => c.id !== "comp.payment-adapter");
+    head.components.find((c) => c.id === "comp.db")!.tech = "PostgreSQL 18";
+    head.tables.push({ id: "tbl.payments", name: "決済", store: "comp.db", realizes: ["inf.order"], states: [], related: [] });
+    head.decisions[0].decision = "PostgreSQL 18 を使う";
+    expect(traceTargets(head, diffModels(base, head))).toEqual({
+      required: ["comp.db", "comp.payment-adapter", "tbl.payments"],
+      applicable: [],
+    });
   });
 });
 
@@ -132,5 +145,10 @@ describe("matchTrace", () => {
     expect(known.has("pr.tdd")).toBe(true);
     expect(known.has("scr.cart")).toBe(true);
     expect(known.has("uc.browse#ac2")).toBe(false);
+  });
+
+  it("accepts a removed design element in Covers without calling it unknown", () => {
+    const report = matchTrace({ required: ["tbl.legacy"], applicable: [] }, ["tbl.legacy"], knownRefs(sampleModel()));
+    expect(report).toMatchObject({ ok: true, covered: ["tbl.legacy"], unknown: [] });
   });
 });

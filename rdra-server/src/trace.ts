@@ -20,6 +20,9 @@ export interface TraceReport {
 // tasks would only produce a "Covers: pr.tdd" line on every task.
 const NOT_TRACED: readonly Principle["category"][] = ["engineering", "technology"];
 
+// Building, changing or tearing down a component or a table is work some task has to do.
+const DESIGN_TRACED: readonly KindKey[] = ["components", "tables"];
+
 function liveChanges(changes: ElementChange[], kind: KindKey): Set<string> {
   return new Set(changes.filter((c) => c.kind === kind && c.type !== "removed").map((c) => c.id));
 }
@@ -41,6 +44,7 @@ export function traceTargets(model: Model, changes: ElementChange[]): TraceTarge
     }
     if (principles.has(p.id) || p.scope.some((id) => usecases.has(id))) required.add(p.id);
   }
+  for (const c of changes) if (DESIGN_TRACED.includes(c.kind)) required.add(c.id);
   return { required: [...required].sort(), applicable: [...applicable].sort() };
 }
 

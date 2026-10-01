@@ -27,7 +27,7 @@ export async function gateSkill(repoRoot: string, skill: string): Promise<GateDe
 
   const marker = await readMarker(repoRoot, approval.featureId!);
   if (!marker) return deny("/trace がまだ通っていません。計画を commit し、/trace で RDRA の差分をすべてカバーしていることを確認してください。");
-  if (marker.rdra_hash !== modelHash(approval.model!)) return deny("/trace の後に RDRA が変更されました。/trace を再実行してください。");
+  if (marker.design_hash !== modelHash(approval.model!)) return deny("/trace の後に RDRA または設計が変更されました。/trace を再実行してください。");
   const base = await resolveBaseCommit(repoRoot);
   const plans = base ? await featurePlans(repoRoot, base) : [];
   if (!samePlans(marker.plans, await planHashes(repoRoot, plans))) {

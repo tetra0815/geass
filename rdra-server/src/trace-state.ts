@@ -7,7 +7,7 @@ import { git } from "./git.js";
 export const PLANS_DIR = "docs/superpowers/plans";
 
 export interface TraceMarker {
-  rdra_hash: string;
+  design_hash: string;
   plans: Record<string, string>;
   traced_at: string;
 }
@@ -64,8 +64,8 @@ export async function writeMarker(repoRoot: string, featureId: string, marker: T
 export async function readMarker(repoRoot: string, featureId: string): Promise<TraceMarker | null> {
   try {
     const data = JSON.parse(await readFile(markerPath(repoRoot, featureId), "utf8")) as Partial<TraceMarker>;
-    if (typeof data.rdra_hash !== "string" || !data.plans || typeof data.plans !== "object") return null;
-    return { rdra_hash: data.rdra_hash, plans: data.plans, traced_at: String(data.traced_at ?? "") };
+    if (typeof data.design_hash !== "string" || !data.plans || typeof data.plans !== "object") return null;
+    return { design_hash: data.design_hash, plans: data.plans, traced_at: String(data.traced_at ?? "") };
   } catch {
     return null;
   }

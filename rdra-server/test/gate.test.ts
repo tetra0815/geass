@@ -103,6 +103,15 @@ describe("gateSkill", () => {
     expect(reason(await gateSkill(repo, "superpowers:executing-plans"))).toContain("計画が変更されました");
   });
 
+  it("requires /trace again when the approved model changed after it", async () => {
+    const { repo } = await tracedFeatureRepo();
+    await approve(repo);
+    expect((await runTrace(repo, T)).status).toBe("ok");
+    await writeFile(join(repo, RDRA_DIR, "screens.yaml"), "- id: scr.cart\n  name: カート画面\n");
+    await approve(repo);
+    expect(reason(await gateSkill(repo, "superpowers:executing-plans"))).toContain("/trace の後に RDRA または設計が変更されました");
+  });
+
   it("denies while the review is pending or rejected", async () => {
     const { repo } = await tracedFeatureRepo();
     const pending = requestReview(emptyReview(), { now: T });

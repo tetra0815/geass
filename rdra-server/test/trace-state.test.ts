@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,7 +12,7 @@ import {
   samePlans,
   writeMarker,
 } from "../src/trace-state.js";
-import { makeFeatureRepo, run, writeFiles } from "./helpers.js";
+import { makeFeatureRepo, makeRepo, run, writeFiles } from "./helpers.js";
 
 const head = (repo: string) => run(repo, "git", ["rev-parse", "HEAD"]).trim();
 
@@ -72,7 +72,7 @@ describe("marker", () => {
   it("writes, reads and removes the marker and keeps the state dir out of git", async () => {
     const repo = await makeFeatureRepo();
     expect(await readMarker(repo, "001-demo")).toBeNull();
-    const marker = { rdra_hash: "sha256:1", plans: { "docs/superpowers/plans/p.md": "sha256:2" }, traced_at: "t" };
+    const marker = { design_hash: "sha256:1", plans: { "docs/superpowers/plans/p.md": "sha256:2" }, traced_at: "t" };
     await writeMarker(repo, "001-demo", marker);
     expect(markerPath(repo, "001-demo")).toBe(join(repo, ".geass", "state", "trace-001-demo.json"));
     expect(await readMarker(repo, "001-demo")).toEqual(marker);
@@ -85,6 +85,13 @@ describe("marker", () => {
   it("treats a corrupted marker as missing", async () => {
     const repo = await makeFeatureRepo();
     await writeFiles(repo, { ".geass/state/trace-001-demo.json": "{ nope" });
+    expect(await readMarker(repo, "001-demo")).toBeNull();
+  });
+
+  it("treats a marker from 0.12.0 as missing", async () => {
+    const repo = await makeRepo();
+    await mkdir(join(repo, ".geass", "state"), { recursive: true });
+    await writeFile(markerPath(repo, "001-demo"), JSON.stringify({ rdra_hash: "sha256:1", plans: {}, traced_at: "t" }));
     expect(await readMarker(repo, "001-demo")).toBeNull();
   });
 });

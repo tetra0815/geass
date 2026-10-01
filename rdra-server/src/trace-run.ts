@@ -39,7 +39,7 @@ export async function runTrace(repoRoot: string, now: string): Promise<TraceOutc
   }
   const report = matchTrace(traceTargets(model, diff.changes), covers, knownRefs(model));
   if (report.ok) {
-    await writeMarker(repoRoot, feature.id, { rdra_hash: modelHash(model), plans: await planHashes(repoRoot, plans), traced_at: now });
+    await writeMarker(repoRoot, feature.id, { design_hash: modelHash(model), plans: await planHashes(repoRoot, plans), traced_at: now });
   } else {
     await removeMarker(repoRoot, feature.id);
   }
