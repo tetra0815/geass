@@ -1,4 +1,5 @@
 import type { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -97,7 +98,7 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
       version: store.version,
       parseError: store.parseError?.message ?? null,
       model: store.model,
-      issues: validate(store.model),
+      issues: validate(store.model, { fileExists: (path) => existsSync(join(store.repoRoot, path)) }),
       layout: await readLayout(store.repoRoot),
       feature: feature?.id ?? null,
       review,

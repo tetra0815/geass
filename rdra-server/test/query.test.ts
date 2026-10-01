@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QueryIndex } from "../src/query.js";
-import { sampleModel } from "./fixtures.js";
+import { sampleFullModel, sampleModel } from "./fixtures.js";
 
 describe("QueryIndex", () => {
   it("answers relation queries", () => {
@@ -10,6 +10,18 @@ describe("QueryIndex", () => {
       "SELECT r.from_id, json_extract(r.attrs, '$.access') AS access FROM relations r WHERE r.to_id = 'inf.order' AND r.kind = 'uc.information'",
     );
     expect(rows).toEqual([{ from_id: "uc.place-order", access: "create" }]);
+  });
+
+  it("exposes the design kinds as views", () => {
+    const index = new QueryIndex();
+    index.rebuild(sampleFullModel());
+    expect(
+      index.query(
+        "SELECT t.id, json_extract(t.data, '$.store') AS store FROM tables t JOIN relations r ON r.from_id = t.id WHERE r.kind = 'tbl.realizes' AND r.to_id = 'inf.order'",
+      ),
+    ).toEqual([{ id: "tbl.orders", store: "comp.db" }]);
+    expect(index.query("SELECT id FROM components ORDER BY id")).toEqual([{ id: "comp.db" }, { id: "comp.payment-adapter" }, { id: "comp.web" }]);
+    expect(index.query("SELECT id FROM decisions")).toEqual([{ id: "adr.postgres" }]);
   });
 
   it("exposes one view per kind and the state tables", () => {

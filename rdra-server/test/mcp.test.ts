@@ -5,7 +5,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { REVIEWS_DIR } from "../src/feature.js";
 import { createMcpServer } from "../src/mcp.js";
-import { RDRA_DIR } from "../src/model/io.js";
+import { DESIGN_DIR, RDRA_DIR } from "../src/model/io.js";
 import { QueryIndex } from "../src/query.js";
 import { RdraStore } from "../src/store.js";
 import { sampleFiles } from "./fixtures.js";
@@ -150,6 +150,28 @@ describe("MCP tools", () => {
       expect(res.text).toContain("差分の基点が見つかりません");
     }
     await expect(readFile(join(repo, REVIEWS_DIR, "001-demo.json"), "utf8")).rejects.toThrow();
+  });
+
+  it("checks that the design realizes the feature's change and writes docs/design", async () => {
+    const repo = await makeFeatureRepo(rdraFiles());
+    const { call } = await connect(repo);
+    await call("rdra_upsert", { items: [{ kind: "information", element: { id: "inf.order", attributes: ["注文番号", "合計金額"] } }] });
+    const before = (await call("rdra_validate")).json();
+    expect(before.featureIssues).toEqual([]);
+    expect(before.designFeatureIssues.map((i: { code: string }) => i.code)).toEqual(["information-not-realized"]);
+
+    const upsert = await call("rdra_upsert", {
+      items: [
+        { kind: "components", element: { id: "comp.db", name: "業務 DB", type: "datastore", doc: "docs/design/er.md" } },
+        { kind: "tables", element: { id: "tbl.orders", name: "注文テーブル", store: "comp.db", realizes: ["inf.order"], states: ["st.order"] } },
+      ],
+    });
+    expect(upsert.isError).toBe(false);
+    const after = (await call("rdra_validate")).json();
+    expect(after.designFeatureIssues).toEqual([]);
+    expect(after.issues.map((i: { code: string }) => i.code)).toContain("missing-doc");
+    expect(await readFile(join(repo, DESIGN_DIR, "tables.yaml"), "utf8")).toContain("tbl.orders");
+    expect((await call("rdra_query", { sql: "SELECT id FROM tables" })).json()).toEqual([{ id: "tbl.orders" }]);
   });
 
   it("refuses a review while a changed usecase has no acceptance criteria", async () => {

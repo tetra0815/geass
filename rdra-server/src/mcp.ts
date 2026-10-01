@@ -1,6 +1,8 @@
-import { relative } from "node:path";
+import { existsSync } from "node:fs";
+import { join, relative } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import type { ElementChange } from "./diff.js";
 import { NO_BASE_MESSAGE, diffAgainstBase } from "./base-diff.js";
 import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { rdraHash } from "./model/hash.js";
@@ -11,7 +13,7 @@ import type { Operation } from "./operations.js";
 import type { QueryIndex } from "./query.js";
 import { approvalState, readReview, requestReview, writeReview } from "./review.js";
 import type { RdraStore } from "./store.js";
-import { hasErrors, validate, validateChanges } from "./validate.js";
+import { hasErrors, validate, validateChanges, validateDesignChanges } from "./validate.js";
 import { SERVER_VERSION } from "./version.js";
 
 export interface McpDeps {
@@ -43,20 +45,21 @@ export function createMcpServer(deps: McpDeps): McpServer {
     return result.ok ? json(result) : fail(`${result.reason}: ${result.message}`);
   };
 
-  /** Issues in this feature's change, or null on a feature branch whose diff base cannot be resolved. */
-  const featureIssues = async () => {
+  /** This feature's changes, or null on a feature branch whose diff base cannot be resolved. */
+  const featureChanges = async (): Promise<ElementChange[] | null> => {
     const diff = await diffAgainstBase(store.repoRoot, store.model);
     if (!diff.base) {
       const feature = await resolveFeature(store.repoRoot);
       if (feature && !isInvalidFeature(feature)) return null;
     }
-    return validateChanges(diff.changes);
+    return diff.changes;
   };
+  const fileExists = (path: string) => existsSync(join(store.repoRoot, path));
 
   server.registerTool(
     "rdra_get_model",
     {
-      description: "RDRA モデル（docs/rdra）を取得する。kind を指定するとその種別だけを返す。",
+      description: "RDRA モデル（docs/rdra）と設計モデル（docs/design）を取得する。kind を指定するとその種別だけを返す。",
       inputSchema: { kind: z.enum(KIND_KEYS).optional() },
     },
     async ({ kind }) => {
@@ -73,7 +76,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_query",
     {
       description:
-        "RDRA モデルに読み取り専用の SQL で問い合わせる。テーブル: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref), acceptance(usecase_id, ac_id, ref, given_text, when_text, then_text)。ビュー: principle_scope(principle_id, target_id)、種別ごとの actors, external_systems, bucs, usecases, screens, events, information, state_models, principles。",
+        "RDRA モデルに読み取り専用の SQL で問い合わせる。テーブル: elements(id, kind, name, description, data), relations(from_id, to_id, kind, attrs), state_nodes(model_id, state_id, name), state_transitions(model_id, from_state, to_state, ref), acceptance(usecase_id, ac_id, ref, given_text, when_text, then_text)。ビュー: principle_scope(principle_id, target_id)、種別ごとの actors, external_systems, bucs, usecases, screens, events, information, state_models, principles、components, tables, decisions。",
       inputSchema: { sql: z.string().min(1) },
     },
     async ({ sql }) => {
@@ -88,12 +91,21 @@ export function createMcpServer(deps: McpDeps): McpServer {
 
   server.registerTool(
     "rdra_validate",
-    { description: "RDRA モデルの整合性チェック。issues の error と featureIssues（この feature の差分に対する検査）はレビュー依頼を妨げ、warning は妨げない。", inputSchema: {} },
+    {
+      description:
+        "RDRA と設計のモデルの整合性チェック。issues の error はレビュー依頼を妨げ、warning は妨げない。featureIssues はこの feature の RDRA の差分の検査（RDRA レビューを妨げる）、designFeatureIssues は設計がこの feature の RDRA の差分を実現しているかの検査（error が設計レビューを妨げる）。",
+      inputSchema: {},
+    },
     async () => {
       try {
-        const changeIssues = await featureIssues();
-        if (!changeIssues) return fail(`この feature の差分を検査できません: ${NO_BASE_MESSAGE}`);
-        return json({ parseError: store.parseError?.message ?? null, issues: validate(store.model), featureIssues: changeIssues });
+        const changes = await featureChanges();
+        if (!changes) return fail(`この feature の差分を検査できません: ${NO_BASE_MESSAGE}`);
+        return json({
+          parseError: store.parseError?.message ?? null,
+          issues: validate(store.model, { fileExists }),
+          featureIssues: validateChanges(changes),
+          designFeatureIssues: validateDesignChanges(store.model, changes),
+        });
       } catch (e) {
         if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
         throw e;
@@ -120,7 +132,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_upsert",
     {
       description:
-        "要素を追加または更新する（既存 ID なら指定したフィールドだけを上書き）。kind: actors, externalSystems, bucs, usecases, screens, events, information, states, principles。ID は <接頭辞>.<スラッグ>（act, ext, buc, uc, scr, evt, inf, st, pr）。principles は category（business/quality/security/engineering/technology）と level（must/should）が必須。usecases の acceptance は [{id, given?, when, then}]。",
+        "要素を追加または更新する（既存 ID なら指定したフィールドだけを上書き）。kind: actors, externalSystems, bucs, usecases, screens, events, information, states, principles（RDRA、docs/rdra）、components, tables, decisions（設計、docs/design）。ID は <接頭辞>.<スラッグ>（act, ext, buc, uc, scr, evt, inf, st, pr, comp, tbl, adr）。principles は category（business/quality/security/engineering/technology）と level（must/should）が必須。usecases の acceptance は [{id, given?, when, then}]。components は type（app/worker/datastore/queue/external）が必須、任意で tech, dependsOn [{ref, label?}], realizes（ext/pr）, holds（inf）, doc。tables は store（datastore の comp）と realizes（inf を 1 つ以上）が必須、任意で states（st）, key, related [{ref, label?}], doc。decisions は status（proposed/accepted/superseded）, context, decision が必須、任意で alternatives, affects（comp/tbl）, basis（pr）, supersededBy（adr）。",
       inputSchema: {
         items: z.array(z.object({ kind: z.enum(KIND_KEYS), element: z.record(z.string(), z.unknown()) })).min(1),
       },
@@ -130,7 +142,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
 
   server.registerTool(
     "rdra_delete",
-    { description: "要素を削除する。その要素を参照している関連も同時に外れ、removedRelations に返る。", inputSchema: { ids: z.array(z.string()).min(1) } },
+    { description: "要素を削除する。その要素を参照している関連も同時に外れ、removedRelations に返る。参照元の要素が成り立たなくなる削除（テーブルの置き場所や唯一の実現情報など）は拒否される。", inputSchema: { ids: z.array(z.string()).min(1) } },
     async ({ ids }) => applyTool(ids.map((id) => ({ op: "delete", id }))),
   );
 
@@ -138,7 +150,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_link",
     {
       description:
-        "関連を張る。relation は起点の種別で決まる（例: uc.screen は uc -> scr）。uc.information には attrs.access（create/read/update/delete）が必要。uc.transition の to は st.<モデル>:<状態>-><状態>。inf.related には任意で attrs.label。pr.scope は pr -> act/ext/buc/uc/scr/inf/st（原則がかかる要素）。",
+        "関連を張る。relation は起点の種別で決まる（例: uc.screen は uc -> scr）。uc.information には attrs.access（create/read/update/delete）が必要。uc.transition の to は st.<モデル>:<状態>-><状態>。inf.related には任意で attrs.label。pr.scope は pr -> act/ext/buc/uc/scr/inf/st（原則がかかる要素）。設計: comp.depends（comp -> comp、任意で attrs.label）, comp.realizes（comp -> ext/pr）, comp.holds（comp -> inf）, tbl.store（tbl -> comp）, tbl.realizes（tbl -> inf）, tbl.state（tbl -> st）, tbl.related（tbl -> tbl、任意で attrs.label）, adr.affects（adr -> comp/tbl）, adr.basis（adr -> pr）, adr.superseded-by（adr -> adr）。",
       inputSchema: {
         links: z.array(linkShape.extend({ attrs: z.record(z.string(), z.string()).optional() })).min(1),
       },
@@ -173,7 +185,8 @@ export function createMcpServer(deps: McpDeps): McpServer {
       }
       let blockers;
       try {
-        blockers = await featureIssues();
+        const changes = await featureChanges();
+        blockers = changes && validateChanges(changes);
       } catch (e) {
         if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
         throw e;
