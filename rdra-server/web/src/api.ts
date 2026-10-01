@@ -1,10 +1,13 @@
 import type { ElementChange } from "../../src/diff.js";
+import type { Stage } from "../../src/feature.js";
 import type { Model } from "../../src/model/kinds.js";
 import type { Layout, Positions, ViewKey } from "../../src/model/view-keys.js";
 import type { Operation } from "../../src/operations.js";
 import type { ReviewComment, ReviewRecord } from "../../src/review.js";
 import type { ApplyResult } from "../../src/store.js";
 import type { Issue } from "../../src/validate.js";
+
+export type Approval = "none" | "pending" | "rejected" | "approved" | "stale";
 
 export interface AppState {
   version: string;
@@ -14,7 +17,8 @@ export interface AppState {
   layout: Layout;
   feature: string | null;
   review: ReviewRecord | null;
-  approval: "none" | "pending" | "rejected" | "approved" | "stale";
+  approval: Approval;
+  design: { review: ReviewRecord | null; approval: Approval; required: boolean };
 }
 
 export interface DiffState {
@@ -49,8 +53,8 @@ export const api = {
   diff: () => get<DiffState>("api/diff"),
   apply: (expectedVersion: string, ops: Operation[]) => send<ApplyResult>("POST", "api/ops", { expectedVersion, ops }),
   saveLayout: (view: ViewKey, positions: Positions) => send<null>("PUT", `api/layout/${view}`, { positions }),
-  decide: (decision: "approved" | "rejected", comments: ReviewComment[], version: string) =>
-    send<{ review?: ReviewRecord; message?: string }>("POST", "api/review/decision", { decision, comments, version }),
+  decide: (decision: "approved" | "rejected", comments: ReviewComment[], version: string, stage: Stage) =>
+    send<{ review?: ReviewRecord; message?: string }>("POST", "api/review/decision", { decision, comments, version, stage }),
 };
 
 export function subscribe(onMessage: (message: { type: string }) => void): () => void {

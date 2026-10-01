@@ -3,10 +3,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { REVIEWS_DIR } from "../src/feature.js";
+import { DESIGN_REVIEWS_DIR, REVIEWS_DIR } from "../src/feature.js";
 import { RDRA_DIR } from "../src/model/io.js";
 import { emptyReview, requestReview, type ReviewRecord } from "../src/review.js";
-import { sampleFiles } from "../test/fixtures.js";
+import { sampleDesignFiles, sampleFiles } from "../test/fixtures.js";
 import { makeFeatureRepo } from "../test/helpers.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -22,7 +22,10 @@ const requestAgain = async (record: ReviewRecord) =>
   writeFile(reviewPath(), JSON.stringify(requestReview(record, { now: new Date().toISOString() }), null, 2));
 
 test.beforeAll(async () => {
-  const files = Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
+  const files = {
+    ...Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c])),
+    ...Object.fromEntries(Object.entries(sampleDesignFiles()).map(([f, c]) => [`docs/${f}`, c])),
+  };
   repo = await makeFeatureRepo(files);
   await mkdir(join(repo, REVIEWS_DIR), { recursive: true });
   await requestAgain(emptyReview());
@@ -122,4 +125,25 @@ test("a decision right after an edit waits for the edited model to load", async 
   await page.getByRole("button", { name: "差し戻す" }).click();
   await expect(page.getByText("差し戻し済み")).toBeVisible();
   expect((await readRecord()).status).toBe("rejected");
+});
+
+test("review the design in its own views and approve it", async ({ page }) => {
+  const designReview = join(repo, DESIGN_REVIEWS_DIR, "001-demo.json");
+  await mkdir(dirname(designReview), { recursive: true });
+  await writeFile(designReview, JSON.stringify(requestReview(emptyReview(), { now: new Date().toISOString() }), null, 2));
+  await page.goto(url);
+  await expect(page.locator('[data-stage="design"]')).toHaveText("レビュー待ち");
+
+  await page.getByRole("button", { name: "コンポーネント", exact: true }).click();
+  await expect(page.locator(".react-flow__node", { hasText: "業務 DB" })).toBeVisible();
+  await page.getByRole("button", { name: "データ", exact: true }).click();
+  await expect(page.locator(".react-flow__node", { hasText: "注文テーブル" })).toBeVisible();
+  await page.getByRole("button", { name: "設計判断", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "業務データは PostgreSQL に置く" })).toBeVisible();
+
+  await page.getByRole("button", { name: "承認" }).click();
+  await expect(page.locator('[data-stage="design"]')).toHaveText("承認済み");
+  const record = JSON.parse(await readFile(designReview, "utf8")) as ReviewRecord;
+  const hash = spawnSync("node", [cli, "hash", "--repo", repo, "--stage", "design"], { encoding: "utf8" }).stdout.trim();
+  expect(record).toMatchObject({ status: "approved", approved_hash: hash });
 });

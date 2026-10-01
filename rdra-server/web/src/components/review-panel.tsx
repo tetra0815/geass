@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReviewComment } from "../../../src/review.js";
 import type { AppState } from "../api.js";
+import { activeStage } from "../review-stage.js";
 
 interface Props {
   state: AppState;
@@ -22,15 +23,19 @@ const STATUS_LABELS: Record<AppState["approval"], string> = {
   stale: "承認後に変更あり（再レビューが必要）",
 };
 
+const DESIGN_NOT_REQUIRED = "不要（この feature に設計の変更なし）";
+
 export function ReviewPanel(props: Props) {
   const { state, drafts, commentTarget, busy } = props;
   const [text, setText] = useState("");
   const errors = state.issues.filter((i) => i.level === "error");
   const warnings = state.issues.filter((i) => i.level === "warning");
-  const pending = state.review?.status === "pending";
+  const stage = activeStage(state);
+  const pending = stage !== null;
   const canApprove = pending && errors.length === 0 && !state.parseError && !busy;
   const canReject = pending && drafts.length > 0 && !busy;
-  const lastRound = state.review?.rounds.at(-1);
+  const lastRound = (stage === "design" ? state.design.review : state.review)?.rounds.at(-1);
+  const designLabel = state.design.approval === "none" && !state.design.required ? DESIGN_NOT_REQUIRED : STATUS_LABELS[state.design.approval];
 
   const add = () => {
     if (text.trim() === "") return;
@@ -40,9 +45,19 @@ export function ReviewPanel(props: Props) {
 
   return (
     <section className="review">
-      <h3>
-        レビュー: <span className={`status status-${state.approval}`}>{STATUS_LABELS[state.approval]}</span>
-      </h3>
+      <h3>レビュー</h3>
+      <p className="stages">
+        RDRA:{" "}
+        <span className={`status status-${state.approval}`} data-stage="rdra">
+          {STATUS_LABELS[state.approval]}
+        </span>
+        <br />
+        設計:{" "}
+        <span className={`status status-${state.design.approval}`} data-stage="design">
+          {designLabel}
+        </span>
+      </p>
+      {stage && <p className="hint">{stage === "rdra" ? "RDRA" : "設計"}のレビュー中です。承認・差し戻しはこのレビューに記録されます。</p>}
       {!state.feature && <p className="hint">feature の外で開いているため、承認・差し戻しはできません。</p>}
 
       <h4>

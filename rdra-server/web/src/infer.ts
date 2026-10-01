@@ -25,6 +25,13 @@ const PAIRS: readonly [string, string, RelationKind][] = [
   ["evt", "ext", "evt.target"],
   ["inf", "inf", "inf.related"],
   ["st", "inf", "st.information"],
+  ["comp", "comp", "comp.depends"],
+  ["comp", "ext", "comp.realizes"],
+  ["comp", "inf", "comp.holds"],
+  ["tbl", "comp", "tbl.store"],
+  ["tbl", "inf", "tbl.realizes"],
+  ["tbl", "st", "tbl.state"],
+  ["tbl", "tbl", "tbl.related"],
 ];
 
 const prefixOf = (id: string) => id.split(/[.:]/, 1)[0];

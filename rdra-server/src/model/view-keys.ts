@@ -4,6 +4,8 @@ export const VIEW_KEYS = [
   "usecase-composite",
   "information-model",
   "state-model",
+  "component-diagram",
+  "data-model",
 ] as const;
 export type ViewKey = (typeof VIEW_KEYS)[number];
 
@@ -13,6 +15,8 @@ export const VIEW_LABELS: Record<ViewKey, string> = {
   "usecase-composite": "ユースケース複合",
   "information-model": "情報モデル",
   "state-model": "状態モデル",
+  "component-diagram": "コンポーネント",
+  "data-model": "データ",
 };
 
 export interface Position {

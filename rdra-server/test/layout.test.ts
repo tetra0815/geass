@@ -11,7 +11,7 @@ describe("layout", () => {
   it("reads an empty layout for every view when nothing is stored", async () => {
     const dir = await mkdtemp(join(tmpdir(), "rdra-layout-"));
     const layout = await readLayout(dir);
-    expect(Object.keys(layout)).toEqual(["system-context", "business-flow", "usecase-composite", "information-model", "state-model"]);
+    expect(Object.keys(layout)).toEqual(["system-context", "business-flow", "usecase-composite", "information-model", "state-model", "component-diagram", "data-model"]);
     expect(layout["usecase-composite"]).toEqual({});
   });
 

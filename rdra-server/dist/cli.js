@@ -28162,6 +28162,9 @@ var init_base_diff = __esm({
 
 // src/feature.ts
 import { join as join2 } from "node:path";
+function stageReviewFile(feature, stage) {
+  return stage === "design" ? feature.designReviewFile : feature.reviewFile;
+}
 function invalidReason(branch, prefix, id) {
   const suggestion = id.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "") || "001-name";
   return `\u30D6\u30E9\u30F3\u30C1 ${branch} \u306F feature \u30D6\u30E9\u30F3\u30C1\uFF08${prefix}*\uFF09\u3067\u3059\u304C\u3001\u300C${id}\u300D\u306F feature ID \u306B\u4F7F\u3048\u307E\u305B\u3093\u3002feature ID \u306F\u82F1\u6570\u5B57\u3067\u59CB\u307E\u308A\u3001\u82F1\u6570\u5B57\u3068 . _ - \u3060\u3051\u304B\u3089\u306A\u308A\u3001/ \u3092\u542B\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u30D6\u30E9\u30F3\u30C1\u540D\u3092 ${prefix}<id> \u306E\u5F62\u306B\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4F8B: git branch -m ${prefix}${suggestion}\uFF09`;
@@ -28673,8 +28676,8 @@ async function writeMarker(repoRoot, featureId, marker) {
 async function readMarker(repoRoot, featureId) {
   try {
     const data = JSON.parse(await readFile3(markerPath(repoRoot, featureId), "utf8"));
-    if (typeof data.rdra_hash !== "string" || !data.plans || typeof data.plans !== "object") return null;
-    return { rdra_hash: data.rdra_hash, plans: data.plans, traced_at: String(data.traced_at ?? "") };
+    if (typeof data.design_hash !== "string" || !data.plans || typeof data.plans !== "object") return null;
+    return { design_hash: data.design_hash, plans: data.plans, traced_at: String(data.traced_at ?? "") };
   } catch {
     return null;
   }
@@ -28704,7 +28707,7 @@ async function gateSkill(repoRoot, skill) {
   if (!EXECUTION_SKILLS.has(name)) return allow;
   const marker = await readMarker(repoRoot, approval.featureId);
   if (!marker) return deny("/trace \u304C\u307E\u3060\u901A\u3063\u3066\u3044\u307E\u305B\u3093\u3002\u8A08\u753B\u3092 commit \u3057\u3001/trace \u3067 RDRA \u306E\u5DEE\u5206\u3092\u3059\u3079\u3066\u30AB\u30D0\u30FC\u3057\u3066\u3044\u308B\u3053\u3068\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-  if (marker.rdra_hash !== modelHash(approval.model)) return deny("/trace \u306E\u5F8C\u306B RDRA \u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002/trace \u3092\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
+  if (marker.design_hash !== modelHash(approval.model)) return deny("/trace \u306E\u5F8C\u306B RDRA \u307E\u305F\u306F\u8A2D\u8A08\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002/trace \u3092\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
   const base = await resolveBaseCommit(repoRoot);
   const plans = base ? await featurePlans(repoRoot, base) : [];
   if (!samePlans(marker.plans, await planHashes(repoRoot, plans))) {
@@ -28760,6 +28763,7 @@ function traceTargets(model, changes) {
     }
     if (principles.has(p.id) || p.scope.some((id) => usecases.has(id))) required2.add(p.id);
   }
+  for (const c of changes) if (DESIGN_TRACED.includes(c.kind)) required2.add(c.id);
   return { required: [...required2].sort(), applicable: [...applicable].sort() };
 }
 function knownRefs(model) {
@@ -28807,12 +28811,13 @@ function matchTrace(targets, covers, known) {
     outOfScope
   };
 }
-var NOT_TRACED, COVERS_LINE, FENCE;
+var NOT_TRACED, DESIGN_TRACED, COVERS_LINE, FENCE;
 var init_trace = __esm({
   "src/trace.ts"() {
     "use strict";
     init_kinds();
     NOT_TRACED = ["engineering", "technology"];
+    DESIGN_TRACED = ["components", "tables"];
     COVERS_LINE = /^\s*(?:[-*]\s+)?(?:\*\*)?Covers(?:\*\*)?:(?:\*\*)?\s*(.*)$/;
     FENCE = /^\s*(`{3,}|~{3,})(.*)$/;
   }
@@ -28848,7 +28853,7 @@ async function runTrace(repoRoot, now) {
   }
   const report = matchTrace(traceTargets(model, diff.changes), covers, knownRefs(model));
   if (report.ok) {
-    await writeMarker(repoRoot, feature.id, { rdra_hash: modelHash(model), plans: await planHashes(repoRoot, plans), traced_at: now });
+    await writeMarker(repoRoot, feature.id, { design_hash: modelHash(model), plans: await planHashes(repoRoot, plans), traced_at: now });
   } else {
     await removeMarker(repoRoot, feature.id);
   }
@@ -32583,7 +32588,9 @@ var init_view_keys = __esm({
       "business-flow",
       "usecase-composite",
       "information-model",
-      "state-model"
+      "state-model",
+      "component-diagram",
+      "data-model"
     ];
   }
 });
@@ -32674,10 +32681,20 @@ async function startHttp(deps, port = 0) {
   store.on("change", onModel);
   store.on("layout", onLayout);
   reviewEvents.on("review", onReview);
+  async function designRequiredNow() {
+    try {
+      const diff2 = await diffAgainstBase(store.repoRoot, store.model);
+      return diff2.base ? designRequired(store.model, diff2.changes) : true;
+    } catch (e) {
+      if (e instanceof ModelParseError) return true;
+      throw e;
+    }
+  }
   async function state() {
     const resolved = await resolveFeature(store.repoRoot);
     const feature = isInvalidFeature(resolved) ? null : resolved;
     const review = feature ? await readReview(feature.reviewFile) : null;
+    const designReview = feature ? await readReview(feature.designReviewFile) : null;
     return {
       version: store.version,
       parseError: store.parseError?.message ?? null,
@@ -32686,7 +32703,12 @@ async function startHttp(deps, port = 0) {
       layout: await readLayout(store.repoRoot),
       feature: feature?.id ?? null,
       review,
-      approval: review ? approvalState(review, rdraHash(store.model)).state : "none"
+      approval: review ? approvalState(review, rdraHash(store.model)).state : "none",
+      design: {
+        review: designReview,
+        approval: designReview ? approvalState(designReview, store.version).state : "none",
+        required: feature ? await designRequiredNow() : false
+      }
     };
   }
   async function diff() {
@@ -32713,6 +32735,8 @@ async function startHttp(deps, port = 0) {
     const decision = body.decision;
     if (decision !== "approved" && decision !== "rejected") throw new HttpError(400, "decision \u306F approved \u304B rejected \u3067\u3059");
     const comments = Array.isArray(body.comments) ? body.comments : [];
+    const stage = body.stage ?? "rdra";
+    if (stage !== "rdra" && stage !== "design") throw new HttpError(400, "stage \u306F rdra \u304B design \u3067\u3059");
     const feature = await resolveFeature(store.repoRoot);
     if (!feature) throw new HttpError(404, "feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093");
     if (isInvalidFeature(feature)) throw new HttpError(404, `\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093: ${feature.reason}`);
@@ -32722,8 +32746,13 @@ async function startHttp(deps, port = 0) {
         throw new HttpError(422, "\u30A8\u30E9\u30FC\u304C\u6B8B\u3063\u3066\u3044\u308B\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093");
       }
       try {
-        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: rdraHash(store.model), now: now() });
-        await writeReview(feature.reviewFile, next);
+        const next = decide(await readReview(stageReviewFile(feature, stage)), {
+          decision,
+          comments,
+          hash: stage === "design" ? store.version : rdraHash(store.model),
+          now: now()
+        });
+        await writeReview(stageReviewFile(feature, stage), next);
         return next;
       } catch (e) {
         if (e instanceof ReviewError) throw new HttpError(422, e.message);
@@ -32809,6 +32838,7 @@ var init_http = __esm({
   "src/http.ts"() {
     "use strict";
     init_wrapper();
+    init_approval();
     init_base_diff();
     init_feature();
     init_layout();
@@ -41987,6 +42017,7 @@ var init_mcp2 = __esm({
     init_mcp();
     init_zod();
     init_base_diff();
+    init_approval();
     init_feature();
     init_hash();
     init_io();
@@ -42414,12 +42445,18 @@ ${USAGE}`);
   const repo = values.repo;
   if (command === "check-approval" && repo) return checkApproval(repo, io);
   if (command === "wait-review" && repo) {
+    const stage = values.stage ?? "rdra";
+    if (stage !== "rdra" && stage !== "design") {
+      io.err(`--stage \u306F rdra \u304B design \u3067\u3059
+${USAGE}`);
+      return 64;
+    }
     const feature = await resolveFeature(repo);
     if (!feature || isInvalidFeature(feature)) {
       io.out(JSON.stringify({ state: "error", message: feature ? feature.reason : APPROVAL_MESSAGES.outside }) + "\n");
       return 3;
     }
-    return waitReview(feature.reviewFile, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
+    return waitReview(stageReviewFile(feature, stage), Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
   }
   if (command === "trace" && repo) {
     const outcome = await runTrace(repo, (/* @__PURE__ */ new Date()).toISOString());
@@ -42476,7 +42513,7 @@ var init_cli = __esm({
     USAGE = [
       "usage:",
       "  cli.js check-approval --repo <root>",
-      "  cli.js wait-review --repo <root> [--interval-ms 1000] [--timeout-sec 0]",
+      "  cli.js wait-review --repo <root> [--stage rdra|design] [--interval-ms 1000] [--timeout-sec 0]",
       "  cli.js trace --repo <root>",
       "  cli.js gate --repo <root> (--skill <name> | --path <file>)",
       "  cli.js hash --repo <root> [--stage rdra|design]",

@@ -5,10 +5,12 @@ import type { ReviewComment } from "../../src/review.js";
 import { api, subscribe, type AppState, type DiffState } from "./api.js";
 import { autoLayout, type LayoutResult } from "./auto-layout.js";
 import { DiagramCanvas, type Selection } from "./components/diagram-canvas.js";
+import { DecisionsTable } from "./components/decisions-table.js";
 import { Inspector } from "./components/inspector.js";
 import { Palette } from "./components/palette.js";
 import { PrinciplesTable } from "./components/principles-table.js";
 import { ReviewPanel } from "./components/review-panel.js";
+import { activeStage } from "./review-stage.js";
 import { inferLink, inferTransition } from "./infer.js";
 import { projectView, viewForId } from "./views.js";
 
@@ -16,7 +18,7 @@ export function App() {
   const [state, setState] = useState<AppState | null>(null);
   const [diff, setDiff] = useState<DiffState | null>(null);
   const [view, setView] = useState<ViewKey>("usecase-composite");
-  const [page, setPage] = useState<"diagram" | "principles">("diagram");
+  const [page, setPage] = useState<"diagram" | "principles" | "decisions">("diagram");
   const [focus, setFocus] = useState<string | null>(null);
   const [diffMode, setDiffMode] = useState(false);
   const [selection, setSelection] = useState<Selection>(null);
@@ -107,9 +109,11 @@ export function App() {
 
   const decideReview = async (decision: "approved" | "rejected") => {
     if (!state) return;
+    const stage = activeStage(state);
+    if (!stage) return;
     setBusy(true);
     try {
-      const res = await api.decide(decision, drafts, state.version);
+      const res = await api.decide(decision, drafts, state.version, stage);
       if (res.status === 200) {
         setDrafts([]);
         setCommentTarget(null);
@@ -124,6 +128,11 @@ export function App() {
   };
 
   const jump = (id: string) => {
+    if (id.startsWith("adr.")) {
+      setPage("decisions");
+      setFocus(id);
+      return;
+    }
     if (id.startsWith("pr.")) {
       setPage("principles");
       setFocus(id);
@@ -145,7 +154,7 @@ export function App() {
   return (
     <div className="app">
       <header>
-        <h1>RDRA レビュー</h1>
+        <h1>RDRA・設計レビュー</h1>
         <nav>
           {VIEW_KEYS.map((v) => (
             <button
@@ -161,6 +170,15 @@ export function App() {
           ))}
           <button className={page === "principles" ? "active" : ""} onClick={() => openPrinciples("")}>
             原則
+          </button>
+          <button
+            className={page === "decisions" ? "active" : ""}
+            onClick={() => {
+              setPage("decisions");
+              setFocus("");
+            }}
+          >
+            設計判断
           </button>
         </nav>
         <label className="check" title={diff?.base ? `基準: ${diff.base.slice(0, 8)}` : "比較対象の分岐点がありません"}>
@@ -182,6 +200,16 @@ export function App() {
               focus={focus || null}
               disabled={readOnly}
               onApply={apply}
+              onJump={jump}
+              onComment={setCommentTarget}
+            />
+          </div>
+        ) : page === "decisions" ? (
+          <div className="canvas">
+            <DecisionsTable
+              model={state.model}
+              changes={diffMode && diff ? diff.changes : []}
+              focus={focus || null}
               onJump={jump}
               onComment={setCommentTarget}
             />

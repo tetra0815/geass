@@ -237,6 +237,22 @@ button.link {
 .rdra-inf {
   background: #ddf4ff;
 }
+.rdra-comp {
+  background: #f6f8fa;
+  border-style: dashed;
+}
+.rdra-tbl {
+  background: #ddf4ff;
+  border-radius: 2px;
+}
+.stages {
+  line-height: 1.8;
+}
+.alternatives {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  color: #57606a;
+}
 .rdra-st.rdra-group {
   background: rgba(221, 244, 255, 0.4);
   text-align: left;

@@ -1,5 +1,5 @@
 import type { ElementChange } from "../../src/diff.js";
-import { KINDS, emptyModel, kindOfId, type AnyElement, type Model } from "../../src/model/kinds.js";
+import { KINDS, emptyModel, kindOfId, type AnyElement, type Component, type Model } from "../../src/model/kinds.js";
 import { parseTransitionRef, relationsOf, type Relation, type RelationKind } from "../../src/model/relations.js";
 import type { ViewKey } from "../../src/model/view-keys.js";
 import { mustPrinciplesFor } from "./principles.js";
@@ -38,6 +38,8 @@ const VIEW_PREFIXES: Record<ViewKey, readonly string[]> = {
   "usecase-composite": ["uc", "act", "scr", "evt", "inf", "ext", "st"],
   "information-model": ["inf"],
   "state-model": [],
+  "component-diagram": ["comp", "ext"],
+  "data-model": ["tbl", "comp", "inf"],
 };
 
 const VIEW_RELATIONS: Record<ViewKey, readonly RelationKind[]> = {
@@ -46,6 +48,8 @@ const VIEW_RELATIONS: Record<ViewKey, readonly RelationKind[]> = {
   "usecase-composite": ["uc.actor", "uc.screen", "uc.event", "uc.information", "uc.transition", "evt.source", "evt.target"],
   "information-model": ["inf.related"],
   "state-model": [],
+  "component-diagram": ["comp.depends", "comp.realizes"],
+  "data-model": ["tbl.store", "tbl.realizes", "tbl.related"],
 };
 
 export const SYSTEM_NODE_ID = "system";
@@ -56,6 +60,8 @@ export function viewForId(id: string): ViewKey {
   if (prefix === "buc") return "business-flow";
   if (prefix === "inf") return "information-model";
   if (prefix === "st") return "state-model";
+  if (prefix === "comp") return "component-diagram";
+  if (prefix === "tbl") return "data-model";
   return "usecase-composite";
 }
 
@@ -79,23 +85,26 @@ function edgeFor(r: Relation, status?: "added" | "removed"): DiagramEdge {
     return { ...base, target: t ? t.model : r.to, label: t ? `${t.from}→${t.to}` : r.to };
   }
   if (r.kind === "uc.information") return { ...base, label: r.attrs.access };
-  if (r.kind === "inf.related") return { ...base, label: r.attrs.label };
+  if (r.kind === "inf.related" || r.kind === "comp.depends" || r.kind === "tbl.related") return { ...base, label: r.attrs.label };
   return base;
 }
 
 function projectElements(view: ViewKey, model: Model, changes: ElementChange[]): Diagram {
   const prefixes = VIEW_PREFIXES[view];
+  // The data view shows only the components that hold tables.
+  const hidden = (e: AnyElement) => view === "data-model" && e.id.startsWith("comp.") && (e as Component).type !== "datastore";
   const statusOf = new Map(changes.map((c) => [c.id, c.type]));
   const nodes: DiagramNode[] = [];
   for (const kind of KINDS) {
     if (!prefixes.includes(kind.prefix)) continue;
     for (const e of model[kind.key] as AnyElement[]) {
+      if (hidden(e)) continue;
       const count = view === "usecase-composite" && kind.prefix === "uc" ? mustPrinciplesFor(model, e.id).length : 0;
-      nodes.push({ id: e.id, type: kind.prefix, label: e.name, elementId: e.id, status: statusOf.get(e.id), principles: count || undefined });
+      nodes.push({ id: e.id, type: kind.prefix, label: kind.key === "components" ? `${e.name} [${(e as Component).type}]` : e.name, elementId: e.id, status: statusOf.get(e.id), principles: count || undefined });
     }
   }
   for (const c of changes) {
-    if (c.type === "removed" && c.before && prefixes.includes(c.id.split(".")[0])) {
+    if (c.type === "removed" && c.before && prefixes.includes(c.id.split(".")[0]) && !hidden(c.before)) {
       nodes.push({ id: c.id, type: c.id.split(".")[0], label: c.before.name, elementId: c.id, status: "removed" });
     }
   }

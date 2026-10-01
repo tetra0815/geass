@@ -33528,6 +33528,9 @@ var init_base_diff = __esm({
 
 // src/feature.ts
 import { join as join2 } from "node:path";
+function stageReviewFile(feature, stage) {
+  return stage === "design" ? feature.designReviewFile : feature.reviewFile;
+}
 function invalidReason(branch, prefix, id) {
   const suggestion = id.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "") || "001-name";
   return `\u30D6\u30E9\u30F3\u30C1 ${branch} \u306F feature \u30D6\u30E9\u30F3\u30C1\uFF08${prefix}*\uFF09\u3067\u3059\u304C\u3001\u300C${id}\u300D\u306F feature ID \u306B\u4F7F\u3048\u307E\u305B\u3093\u3002feature ID \u306F\u82F1\u6570\u5B57\u3067\u59CB\u307E\u308A\u3001\u82F1\u6570\u5B57\u3068 . _ - \u3060\u3051\u304B\u3089\u306A\u308A\u3001/ \u3092\u542B\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u30D6\u30E9\u30F3\u30C1\u540D\u3092 ${prefix}<id> \u306E\u5F62\u306B\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u4F8B: git branch -m ${prefix}${suggestion}\uFF09`;
@@ -33558,74 +33561,9 @@ var init_feature = __esm({
   }
 });
 
-// src/model/view-keys.ts
-function isViewKey(value) {
-  return VIEW_KEYS.includes(value);
-}
-function emptyLayout() {
-  return Object.fromEntries(VIEW_KEYS.map((v) => [v, {}]));
-}
-var VIEW_KEYS;
-var init_view_keys = __esm({
-  "src/model/view-keys.ts"() {
-    "use strict";
-    VIEW_KEYS = [
-      "system-context",
-      "business-flow",
-      "usecase-composite",
-      "information-model",
-      "state-model"
-    ];
-  }
-});
-
-// src/layout.ts
-import { mkdir as mkdir2, readFile as readFile2, writeFile as writeFile2 } from "node:fs/promises";
-import { join as join3 } from "node:path";
-function sanitize(data) {
-  const out = {};
-  if (data === null || typeof data !== "object" || Array.isArray(data)) return out;
-  for (const [id, value] of Object.entries(data)) {
-    const p = value;
-    if (p && typeof p.x === "number" && typeof p.y === "number" && Number.isFinite(p.x) && Number.isFinite(p.y)) {
-      out[id] = { x: Math.round(p.x), y: Math.round(p.y) };
-    }
-  }
-  return out;
-}
-async function readView(repoRoot, view) {
-  try {
-    return sanitize((0, import_yaml2.parse)(await readFile2(join3(repoRoot, LAYOUT_DIR, `${view}.yaml`), "utf8")));
-  } catch {
-    return {};
-  }
-}
-async function readLayout(repoRoot) {
-  const layout = emptyLayout();
-  for (const view of VIEW_KEYS) layout[view] = await readView(repoRoot, view);
-  return layout;
-}
-async function writeLayoutView(repoRoot, view, positions) {
-  const merged = { ...await readView(repoRoot, view), ...sanitize(positions) };
-  const sorted = Object.fromEntries(Object.keys(merged).sort().map((id) => [id, merged[id]]));
-  await mkdir2(join3(repoRoot, LAYOUT_DIR), { recursive: true });
-  await writeFile2(join3(repoRoot, LAYOUT_DIR, `${view}.yaml`), (0, import_yaml2.stringify)(sorted, { lineWidth: 0 }), "utf8");
-  return sorted;
-}
-var import_yaml2, LAYOUT_DIR;
-var init_layout = __esm({
-  "src/layout.ts"() {
-    "use strict";
-    import_yaml2 = __toESM(require_dist(), 1);
-    init_io();
-    init_view_keys();
-    LAYOUT_DIR = `${RDRA_DIR}/layout`;
-  }
-});
-
 // src/review.ts
 import { randomBytes } from "node:crypto";
-import { mkdir as mkdir3, readFile as readFile3, rename, rm, writeFile as writeFile3 } from "node:fs/promises";
+import { mkdir as mkdir2, readFile as readFile2, rename, rm, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname2 } from "node:path";
 function emptyReview() {
   return { status: "none", approved_hash: null, requested_at: null, decided_at: null, rounds: [] };
@@ -33633,7 +33571,7 @@ function emptyReview() {
 async function readReview(file2) {
   let text;
   try {
-    text = await readFile3(file2, "utf8");
+    text = await readFile2(file2, "utf8");
   } catch (e) {
     if (e.code === "ENOENT") return emptyReview();
     throw e;
@@ -33643,10 +33581,10 @@ async function readReview(file2) {
   return { ...emptyReview(), ...data };
 }
 async function writeReview(file2, record2) {
-  await mkdir3(dirname2(file2), { recursive: true });
+  await mkdir2(dirname2(file2), { recursive: true });
   const tmp = `${file2}.tmp-${process.pid}-${randomBytes(6).toString("hex")}`;
   try {
-    await writeFile3(tmp, JSON.stringify(record2, null, 2) + "\n", "utf8");
+    await writeFile2(tmp, JSON.stringify(record2, null, 2) + "\n", "utf8");
     await rename(tmp, file2);
   } catch (e) {
     await rm(tmp, { force: true });
@@ -33971,6 +33909,92 @@ var init_validate = __esm({
   }
 });
 
+// src/approval.ts
+function designRequired(model, changes) {
+  return changes.some((c) => kindDef(c.kind).layer === "design") || hasErrors(validateDesignChanges(model, changes));
+}
+var init_approval = __esm({
+  "src/approval.ts"() {
+    "use strict";
+    init_base_diff();
+    init_diff();
+    init_feature();
+    init_git();
+    init_hash();
+    init_io();
+    init_kinds();
+    init_review();
+    init_validate();
+  }
+});
+
+// src/model/view-keys.ts
+function isViewKey(value) {
+  return VIEW_KEYS.includes(value);
+}
+function emptyLayout() {
+  return Object.fromEntries(VIEW_KEYS.map((v) => [v, {}]));
+}
+var VIEW_KEYS;
+var init_view_keys = __esm({
+  "src/model/view-keys.ts"() {
+    "use strict";
+    VIEW_KEYS = [
+      "system-context",
+      "business-flow",
+      "usecase-composite",
+      "information-model",
+      "state-model",
+      "component-diagram",
+      "data-model"
+    ];
+  }
+});
+
+// src/layout.ts
+import { mkdir as mkdir3, readFile as readFile3, writeFile as writeFile3 } from "node:fs/promises";
+import { join as join3 } from "node:path";
+function sanitize(data) {
+  const out = {};
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return out;
+  for (const [id, value] of Object.entries(data)) {
+    const p = value;
+    if (p && typeof p.x === "number" && typeof p.y === "number" && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+      out[id] = { x: Math.round(p.x), y: Math.round(p.y) };
+    }
+  }
+  return out;
+}
+async function readView(repoRoot, view) {
+  try {
+    return sanitize((0, import_yaml2.parse)(await readFile3(join3(repoRoot, LAYOUT_DIR, `${view}.yaml`), "utf8")));
+  } catch {
+    return {};
+  }
+}
+async function readLayout(repoRoot) {
+  const layout = emptyLayout();
+  for (const view of VIEW_KEYS) layout[view] = await readView(repoRoot, view);
+  return layout;
+}
+async function writeLayoutView(repoRoot, view, positions) {
+  const merged = { ...await readView(repoRoot, view), ...sanitize(positions) };
+  const sorted = Object.fromEntries(Object.keys(merged).sort().map((id) => [id, merged[id]]));
+  await mkdir3(join3(repoRoot, LAYOUT_DIR), { recursive: true });
+  await writeFile3(join3(repoRoot, LAYOUT_DIR, `${view}.yaml`), (0, import_yaml2.stringify)(sorted, { lineWidth: 0 }), "utf8");
+  return sorted;
+}
+var import_yaml2, LAYOUT_DIR;
+var init_layout = __esm({
+  "src/layout.ts"() {
+    "use strict";
+    import_yaml2 = __toESM(require_dist(), 1);
+    init_io();
+    init_view_keys();
+    LAYOUT_DIR = `${RDRA_DIR}/layout`;
+  }
+});
+
 // src/http.ts
 import { existsSync } from "node:fs";
 import { readFile as readFile4 } from "node:fs/promises";
@@ -34013,10 +34037,20 @@ async function startHttp(deps, port = 0) {
   store.on("change", onModel);
   store.on("layout", onLayout);
   reviewEvents.on("review", onReview);
+  async function designRequiredNow() {
+    try {
+      const diff2 = await diffAgainstBase(store.repoRoot, store.model);
+      return diff2.base ? designRequired(store.model, diff2.changes) : true;
+    } catch (e) {
+      if (e instanceof ModelParseError) return true;
+      throw e;
+    }
+  }
   async function state() {
     const resolved = await resolveFeature(store.repoRoot);
     const feature = isInvalidFeature(resolved) ? null : resolved;
     const review = feature ? await readReview(feature.reviewFile) : null;
+    const designReview = feature ? await readReview(feature.designReviewFile) : null;
     return {
       version: store.version,
       parseError: store.parseError?.message ?? null,
@@ -34025,7 +34059,12 @@ async function startHttp(deps, port = 0) {
       layout: await readLayout(store.repoRoot),
       feature: feature?.id ?? null,
       review,
-      approval: review ? approvalState(review, rdraHash(store.model)).state : "none"
+      approval: review ? approvalState(review, rdraHash(store.model)).state : "none",
+      design: {
+        review: designReview,
+        approval: designReview ? approvalState(designReview, store.version).state : "none",
+        required: feature ? await designRequiredNow() : false
+      }
     };
   }
   async function diff() {
@@ -34052,6 +34091,8 @@ async function startHttp(deps, port = 0) {
     const decision = body.decision;
     if (decision !== "approved" && decision !== "rejected") throw new HttpError(400, "decision \u306F approved \u304B rejected \u3067\u3059");
     const comments = Array.isArray(body.comments) ? body.comments : [];
+    const stage = body.stage ?? "rdra";
+    if (stage !== "rdra" && stage !== "design") throw new HttpError(400, "stage \u306F rdra \u304B design \u3067\u3059");
     const feature = await resolveFeature(store.repoRoot);
     if (!feature) throw new HttpError(404, "feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093");
     if (isInvalidFeature(feature)) throw new HttpError(404, `\u30EC\u30D3\u30E5\u30FC\u3067\u304D\u307E\u305B\u3093: ${feature.reason}`);
@@ -34061,8 +34102,13 @@ async function startHttp(deps, port = 0) {
         throw new HttpError(422, "\u30A8\u30E9\u30FC\u304C\u6B8B\u3063\u3066\u3044\u308B\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093");
       }
       try {
-        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: rdraHash(store.model), now: now() });
-        await writeReview(feature.reviewFile, next);
+        const next = decide(await readReview(stageReviewFile(feature, stage)), {
+          decision,
+          comments,
+          hash: stage === "design" ? store.version : rdraHash(store.model),
+          now: now()
+        });
+        await writeReview(stageReviewFile(feature, stage), next);
         return next;
       } catch (e) {
         if (e instanceof ReviewError) throw new HttpError(422, e.message);
@@ -34148,6 +34194,7 @@ var init_http = __esm({
   "src/http.ts"() {
     "use strict";
     init_wrapper();
+    init_approval();
     init_base_diff();
     init_feature();
     init_layout();
@@ -49936,10 +49983,10 @@ function createMcpServer(deps) {
   server.registerTool(
     "rdra_request_review",
     {
-      description: "\u73FE\u5728\u306E RDRA \u30E2\u30C7\u30EB\u306B\u3064\u3044\u3066\u4EBA\u9593\u306E\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3059\u308B\uFF08\u72B6\u614B\u3092 pending \u306B\u3059\u308B\uFF09\u3002\u30A8\u30E9\u30FC\u304C 1 \u4EF6\u3067\u3082\u3042\u308B\u3068\u4F9D\u983C\u3067\u304D\u306A\u3044\u3002\u627F\u8A8D\u30FB\u5DEE\u3057\u623B\u3057\u306F\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u4EBA\u9593\u3060\u3051\u304C\u884C\u3046\u3002",
-      inputSchema: {}
+      description: "\u4EBA\u9593\u306E\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3059\u308B\uFF08\u72B6\u614B\u3092 pending \u306B\u3059\u308B\uFF09\u3002stage: rdra\uFF08\u65E2\u5B9A\u3002RDRA \u30E2\u30C7\u30EB\uFF09/ design\uFF08\u8A2D\u8A08\u30E2\u30C7\u30EB\u3002RDRA \u304C\u627F\u8A8D\u6E08\u307F\u3067\u3001\u8A2D\u8A08\u304C\u3053\u306E feature \u306E RDRA \u306E\u5909\u66F4\u3092\u5B9F\u73FE\u3057\u3066\u3044\u308B\u3068\u304D\u3060\u3051\u4F9D\u983C\u3067\u304D\u308B\uFF09\u3002\u30A8\u30E9\u30FC\u304C 1 \u4EF6\u3067\u3082\u3042\u308B\u3068\u4F9D\u983C\u3067\u304D\u306A\u3044\u3002\u627F\u8A8D\u30FB\u5DEE\u3057\u623B\u3057\u306F\u30EC\u30D3\u30E5\u30FC\u753B\u9762\u3067\u4EBA\u9593\u3060\u3051\u304C\u884C\u3046\u3002",
+      inputSchema: { stage: external_exports.enum(["rdra", "design"]).optional() }
     },
-    async () => {
+    async ({ stage = "rdra" }) => {
       const feature = await resolveFeature(store.repoRoot);
       if (!feature) {
         return fail("feature \u306E\u5916\u3067\u306F\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093\u3002feature/* \u30D6\u30E9\u30F3\u30C1\uFF08/feature-start \u3067\u4F5C\u3063\u305F worktree\uFF09\u3067\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044");
@@ -49952,43 +49999,75 @@ function createMcpServer(deps) {
         return fail(`\u30A8\u30E9\u30FC\u3092\u89E3\u6D88\u3057\u3066\u304B\u3089\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3057\u3066\u304F\u3060\u3055\u3044:
 ${errors.join("\n")}`);
       }
-      let blockers;
+      let changes;
       try {
-        const changes = await featureChanges();
-        blockers = changes && validateChanges(changes);
+        changes = await featureChanges();
       } catch (e) {
-        if (e instanceof ModelParseError) return fail(`\u5206\u5C90\u70B9\u306E RDRA \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
+        if (e instanceof ModelParseError) return fail(`\u5206\u5C90\u70B9\u306E\u30E2\u30C7\u30EB\u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`);
         throw e;
       }
-      if (!blockers) return fail(`\u53D7\u3051\u5165\u308C\u6761\u4EF6\u3092\u691C\u67FB\u3067\u304D\u306A\u3044\u305F\u3081\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093: ${NO_BASE_MESSAGE}`);
-      if (blockers.length > 0) {
-        return fail(`\u53D7\u3051\u5165\u308C\u6761\u4EF6\u304C\u8DB3\u308A\u306A\u3044\u305F\u3081\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093:
+      if (stage === "rdra") {
+        if (!changes) return fail(`\u53D7\u3051\u5165\u308C\u6761\u4EF6\u3092\u691C\u67FB\u3067\u304D\u306A\u3044\u305F\u3081\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093: ${NO_BASE_MESSAGE}`);
+        const blockers = validateChanges(changes);
+        if (blockers.length > 0) {
+          return fail(`\u53D7\u3051\u5165\u308C\u6761\u4EF6\u304C\u8DB3\u308A\u306A\u3044\u305F\u3081\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093:
 ${blockers.map((i) => `- ${i.message}`).join("\n")}`);
+        }
+      } else {
+        const rdra = approvalState(await readReview(feature.reviewFile), rdraHash(store.model)).state;
+        if (rdra !== "approved") {
+          return fail("RDRA \u304C\u627F\u8A8D\u3055\u308C\u3066\u3044\u306A\u3044\u305F\u3081\u3001\u8A2D\u8A08\u306E\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B /rdra \u3067 RDRA \u306E\u627F\u8A8D\u3092\u53D7\u3051\u3066\u304F\u3060\u3055\u3044");
+        }
+        if (!changes) return fail(`\u8A2D\u8A08\u306E\u7DB2\u7F85\u3092\u691C\u67FB\u3067\u304D\u306A\u3044\u305F\u3081\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093: ${NO_BASE_MESSAGE}`);
+        const gaps = validateDesignChanges(store.model, changes).filter((i) => i.level === "error");
+        if (gaps.length > 0) {
+          return fail(`\u8A2D\u8A08\u304C\u3053\u306E feature \u306E RDRA \u306E\u5909\u66F4\u3092\u5B9F\u73FE\u3057\u3066\u3044\u306A\u3044\u305F\u3081\u3001\u30EC\u30D3\u30E5\u30FC\u3092\u4F9D\u983C\u3067\u304D\u307E\u305B\u3093:
+${gaps.map((i) => `- ${i.message}`).join("\n")}`);
+        }
       }
+      const file2 = stageReviewFile(feature, stage);
       const record2 = await store.exclusive(async () => {
-        const next = requestReview(await readReview(feature.reviewFile), { now: now() });
-        await writeReview(feature.reviewFile, next);
+        const next = requestReview(await readReview(file2), { now: now() });
+        await writeReview(file2, next);
         return next;
       });
       deps.onReviewChange?.();
-      return json2({ status: record2.status, url: deps.reviewUrl(), reviewFile: relative(store.repoRoot, feature.reviewFile) });
+      return json2({ stage, status: record2.status, url: deps.reviewUrl(), reviewFile: relative(store.repoRoot, file2) });
     }
   );
   server.registerTool(
     "rdra_review_status",
-    { description: "\u30EC\u30D3\u30E5\u30FC\u306E\u72B6\u614B\uFF08none / pending / approved / rejected\uFF09\u3068\u3001\u6700\u5F8C\u306E\u5224\u65AD\u306E\u30B3\u30E1\u30F3\u30C8\u3002approval \u304C stale \u306A\u3089\u627F\u8A8D\u5F8C\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u3066\u3044\u308B\u3002", inputSchema: {} },
+    {
+      description: "RDRA \u3068\u8A2D\u8A08\u306E\u30EC\u30D3\u30E5\u30FC\u306E\u72B6\u614B\uFF08none / pending / approved / rejected\uFF09\u3068\u3001\u6700\u5F8C\u306E\u5224\u65AD\u306E\u30B3\u30E1\u30F3\u30C8\u3002approval \u304C stale \u306A\u3089\u627F\u8A8D\u5F8C\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u3066\u3044\u308B\u3002design.required \u304C false \u306A\u3089\u3001\u3053\u306E feature \u306F\u8A2D\u8A08\u306E\u627F\u8A8D\u306A\u3057\u3067\u8A08\u753B\u306B\u9032\u3081\u308B\u3002",
+      inputSchema: {}
+    },
     async () => {
       const feature = await resolveFeature(store.repoRoot);
       if (!feature || isInvalidFeature(feature)) {
         const note = feature ? feature.reason : "feature \u306E\u5916\u3067\u3059";
-        return json2({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note });
+        const design = { status: "none", approval: "none", lastRound: null, required: null };
+        return json2({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), design, note });
       }
       const record2 = await readReview(feature.reviewFile);
+      const designRecord = await readReview(feature.designReviewFile);
+      let required2 = null;
+      try {
+        const changes = await featureChanges();
+        required2 = changes ? designRequired(store.model, changes) : null;
+      } catch (e) {
+        if (!(e instanceof ModelParseError)) throw e;
+      }
       return json2({
         status: record2.status,
         approval: approvalState(record2, rdraHash(store.model)).state,
         lastRound: record2.rounds.at(-1) ?? null,
-        url: deps.reviewUrl()
+        url: deps.reviewUrl(),
+        design: {
+          status: designRecord.status,
+          approval: approvalState(designRecord, store.version).state,
+          lastRound: designRecord.rounds.at(-1) ?? null,
+          required: required2
+        }
       });
     }
   );
@@ -50001,6 +50080,7 @@ var init_mcp2 = __esm({
     init_mcp();
     init_zod();
     init_base_diff();
+    init_approval();
     init_feature();
     init_hash();
     init_io();
