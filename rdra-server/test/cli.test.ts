@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../src/cli.js";
-import { REVIEWS_DIR } from "../src/feature.js";
+import { DESIGN_REVIEWS_DIR, REVIEWS_DIR } from "../src/feature.js";
 import { modelHash, rdraHash } from "../src/model/hash.js";
 import { RDRA_DIR } from "../src/model/io.js";
 import { nodeVersionError } from "../src/node-version.js";
@@ -87,6 +87,27 @@ describe("check-approval", () => {
 });
 
 describe("wait-review", () => {
+  it("waits on the design review with --stage design", async () => {
+    const repo = await makeFeatureRepo(rdraFiles());
+    const file = join(repo, DESIGN_REVIEWS_DIR, "001-demo.json");
+    await writeReview(file, requestReview(emptyReview(), { now: T }));
+    const out: string[] = [];
+    let slept = 0;
+    const io: CliIo = {
+      out: (s) => void out.push(s),
+      err: () => undefined,
+      sleep: async () => {
+        slept += 1;
+        if (slept === 1) {
+          await writeReview(file, decide(requestReview(emptyReview(), { now: T }), { decision: "approved", comments: [], hash: "h", now: T }));
+        }
+      },
+    };
+    expect(await runCli(["wait-review", "--repo", repo, "--stage", "design"], io)).toBe(0);
+    expect(JSON.parse(out.join(""))).toMatchObject({ status: "approved" });
+    expect(await runCli(["wait-review", "--repo", repo, "--stage", "nope"], capture().io)).toBe(64);
+  });
+
   it("exits 2 when nothing is pending", async () => {
     const repo = await makeFeatureRepo();
     const c = capture();

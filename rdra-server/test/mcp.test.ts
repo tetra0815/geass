@@ -3,7 +3,9 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { REVIEWS_DIR } from "../src/feature.js";
+import { DESIGN_REVIEWS_DIR, REVIEWS_DIR, resolveFeature, type Feature } from "../src/feature.js";
+import { rdraHash } from "../src/model/hash.js";
+import { decide, emptyReview, requestReview, writeReview } from "../src/review.js";
 import { createMcpServer } from "../src/mcp.js";
 import { DESIGN_DIR, RDRA_DIR } from "../src/model/io.js";
 import { QueryIndex } from "../src/query.js";
@@ -39,6 +41,46 @@ async function connect(repo: string, onReviewChange?: () => void) {
 }
 
 describe("MCP tools", () => {
+  it("requests a design review only after the RDRA approval and once the design realizes the change", async () => {
+    const repo = await makeFeatureRepo(rdraFiles());
+    const { call, store } = await connect(repo);
+    await call("rdra_upsert", { items: [{ kind: "information", element: { id: "inf.order", attributes: ["注文番号", "合計金額"] } }] });
+    const early = await call("rdra_request_review", { stage: "design" });
+    expect(early.isError).toBe(true);
+    expect(early.text).toContain("/rdra");
+
+    const feature = (await resolveFeature(repo)) as Feature;
+    const T = "2026-10-01T10:00:00+09:00";
+    await writeReview(
+      feature.reviewFile,
+      decide(requestReview(emptyReview(), { now: T }), { decision: "approved", comments: [], hash: rdraHash(store.model), now: T }),
+    );
+    const gap = await call("rdra_request_review", { stage: "design" });
+    expect(gap.isError).toBe(true);
+    expect(gap.text).toContain("inf.order");
+
+    await call("rdra_upsert", {
+      items: [
+        { kind: "components", element: { id: "comp.db", name: "業務 DB", type: "datastore" } },
+        { kind: "tables", element: { id: "tbl.orders", name: "注文テーブル", store: "comp.db", realizes: ["inf.order"], states: ["st.order"] } },
+      ],
+    });
+    expect((await call("rdra_request_review", { stage: "design" })).json()).toMatchObject({
+      stage: "design",
+      status: "pending",
+      reviewFile: `${DESIGN_REVIEWS_DIR}/001-demo.json`,
+    });
+    expect((await call("rdra_review_status")).json()).toMatchObject({
+      approval: "approved",
+      design: { status: "pending", approval: "pending", required: true },
+    });
+  });
+
+  it("reports the design as not required for a feature without design work", async () => {
+    const { call } = await connect(await makeFeatureRepo(rdraFiles()));
+    expect((await call("rdra_review_status")).json().design).toEqual({ status: "none", approval: "none", lastRound: null, required: false });
+  });
+
   it("lists every tool and no approval tool", async () => {
     const { client } = await connect(await makeRepo());
     const names = (await client.listTools()).tools.map((t) => t.name).sort();

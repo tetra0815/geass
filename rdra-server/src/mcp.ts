@@ -4,7 +4,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ElementChange } from "./diff.js";
 import { NO_BASE_MESSAGE, diffAgainstBase } from "./base-diff.js";
-import { isInvalidFeature, resolveFeature } from "./feature.js";
+import { designRequired } from "./approval.js";
+import { isInvalidFeature, resolveFeature, stageReviewFile } from "./feature.js";
 import { rdraHash } from "./model/hash.js";
 import { ModelParseError } from "./model/io.js";
 import { KIND_KEYS } from "./model/kinds.js";
@@ -168,10 +169,10 @@ export function createMcpServer(deps: McpDeps): McpServer {
     "rdra_request_review",
     {
       description:
-        "現在の RDRA モデルについて人間のレビューを依頼する（状態を pending にする）。エラーが 1 件でもあると依頼できない。承認・差し戻しはレビュー画面で人間だけが行う。",
-      inputSchema: {},
+        "人間のレビューを依頼する（状態を pending にする）。stage: rdra（既定。RDRA モデル）/ design（設計モデル。RDRA が承認済みで、設計がこの feature の RDRA の変更を実現しているときだけ依頼できる）。エラーが 1 件でもあると依頼できない。承認・差し戻しはレビュー画面で人間だけが行う。",
+      inputSchema: { stage: z.enum(["rdra", "design"]).optional() },
     },
-    async () => {
+    async ({ stage = "rdra" }) => {
       const feature = await resolveFeature(store.repoRoot);
       if (!feature) {
         return fail("feature の外ではレビューを依頼できません。feature/* ブランチ（/feature-start で作った worktree）で実行してください");
@@ -183,45 +184,77 @@ export function createMcpServer(deps: McpDeps): McpServer {
         const errors = issues.filter((i) => i.level === "error").map((i) => `- ${i.message}`);
         return fail(`エラーを解消してからレビューを依頼してください:\n${errors.join("\n")}`);
       }
-      let blockers;
+      let changes;
       try {
-        const changes = await featureChanges();
-        blockers = changes && validateChanges(changes);
+        changes = await featureChanges();
       } catch (e) {
-        if (e instanceof ModelParseError) return fail(`分岐点の RDRA を読めません: ${e.message}`);
+        if (e instanceof ModelParseError) return fail(`分岐点のモデルを読めません: ${e.message}`);
         throw e;
       }
-      if (!blockers) return fail(`受け入れ条件を検査できないためレビューを依頼できません: ${NO_BASE_MESSAGE}`);
-      if (blockers.length > 0) {
-        return fail(`受け入れ条件が足りないためレビューを依頼できません:\n${blockers.map((i) => `- ${i.message}`).join("\n")}`);
+      if (stage === "rdra") {
+        if (!changes) return fail(`受け入れ条件を検査できないためレビューを依頼できません: ${NO_BASE_MESSAGE}`);
+        const blockers = validateChanges(changes);
+        if (blockers.length > 0) {
+          return fail(`受け入れ条件が足りないためレビューを依頼できません:\n${blockers.map((i) => `- ${i.message}`).join("\n")}`);
+        }
+      } else {
+        const rdra = approvalState(await readReview(feature.reviewFile), rdraHash(store.model)).state;
+        if (rdra !== "approved") {
+          return fail("RDRA が承認されていないため、設計のレビューを依頼できません。先に /rdra で RDRA の承認を受けてください");
+        }
+        if (!changes) return fail(`設計の網羅を検査できないためレビューを依頼できません: ${NO_BASE_MESSAGE}`);
+        const gaps = validateDesignChanges(store.model, changes).filter((i) => i.level === "error");
+        if (gaps.length > 0) {
+          return fail(`設計がこの feature の RDRA の変更を実現していないため、レビューを依頼できません:\n${gaps.map((i) => `- ${i.message}`).join("\n")}`);
+        }
       }
+      const file = stageReviewFile(feature, stage);
       // Read-modify-write under the store lock so it cannot race a decision
       // arriving from the review UI.
       const record = await store.exclusive(async () => {
-        const next = requestReview(await readReview(feature.reviewFile), { now: now() });
-        await writeReview(feature.reviewFile, next);
+        const next = requestReview(await readReview(file), { now: now() });
+        await writeReview(file, next);
         return next;
       });
       deps.onReviewChange?.();
-      return json({ status: record.status, url: deps.reviewUrl(), reviewFile: relative(store.repoRoot, feature.reviewFile) });
+      return json({ stage, status: record.status, url: deps.reviewUrl(), reviewFile: relative(store.repoRoot, file) });
     },
   );
 
   server.registerTool(
     "rdra_review_status",
-    { description: "レビューの状態（none / pending / approved / rejected）と、最後の判断のコメント。approval が stale なら承認後にモデルが変更されている。", inputSchema: {} },
+    {
+      description:
+        "RDRA と設計のレビューの状態（none / pending / approved / rejected）と、最後の判断のコメント。approval が stale なら承認後にモデルが変更されている。design.required が false なら、この feature は設計の承認なしで計画に進める。",
+      inputSchema: {},
+    },
     async () => {
       const feature = await resolveFeature(store.repoRoot);
       if (!feature || isInvalidFeature(feature)) {
         const note = feature ? feature.reason : "feature の外です";
-        return json({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), note });
+        const design = { status: "none", approval: "none", lastRound: null, required: null };
+        return json({ status: "none", approval: "none", lastRound: null, url: deps.reviewUrl(), design, note });
       }
       const record = await readReview(feature.reviewFile);
+      const designRecord = await readReview(feature.designReviewFile);
+      let required: boolean | null = null;
+      try {
+        const changes = await featureChanges();
+        required = changes ? designRequired(store.model, changes) : null;
+      } catch (e) {
+        if (!(e instanceof ModelParseError)) throw e;
+      }
       return json({
         status: record.status,
         approval: approvalState(record, rdraHash(store.model)).state,
         lastRound: record.rounds.at(-1) ?? null,
         url: deps.reviewUrl(),
+        design: {
+          status: designRecord.status,
+          approval: approvalState(designRecord, store.version).state,
+          lastRound: designRecord.rounds.at(-1) ?? null,
+          required,
+        },
       });
     },
   );

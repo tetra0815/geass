@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { APPROVAL_MESSAGES, checkFeatureApproval } from "./approval.js";
-import { isInvalidFeature, resolveFeature } from "./feature.js";
+import { isInvalidFeature, resolveFeature, stageReviewFile } from "./feature.js";
 import { gatePath, gateSkill } from "./gate.js";
 import { modelHash, rdraHash } from "./model/hash.js";
 import { ModelParseError, parseModel, readModelFiles } from "./model/io.js";
@@ -22,7 +22,7 @@ const defaultIo: CliIo = {
 const USAGE = [
   "usage:",
   "  cli.js check-approval --repo <root>",
-  "  cli.js wait-review --repo <root> [--interval-ms 1000] [--timeout-sec 0]",
+  "  cli.js wait-review --repo <root> [--stage rdra|design] [--interval-ms 1000] [--timeout-sec 0]",
   "  cli.js trace --repo <root>",
   "  cli.js gate --repo <root> (--skill <name> | --path <file>)",
   "  cli.js hash --repo <root> [--stage rdra|design]",
@@ -100,12 +100,17 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
 
   if (command === "check-approval" && repo) return checkApproval(repo, io);
   if (command === "wait-review" && repo) {
+    const stage = values.stage ?? "rdra";
+    if (stage !== "rdra" && stage !== "design") {
+      io.err(`--stage は rdra か design です\n${USAGE}`);
+      return 64;
+    }
     const feature = await resolveFeature(repo);
     if (!feature || isInvalidFeature(feature)) {
       io.out(JSON.stringify({ state: "error", message: feature ? feature.reason : APPROVAL_MESSAGES.outside }) + "\n");
       return 3;
     }
-    return waitReview(feature.reviewFile, Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
+    return waitReview(stageReviewFile(feature, stage), Number(values["interval-ms"] ?? "1000"), Number(values["timeout-sec"] ?? "0"), io);
   }
   if (command === "trace" && repo) {
     const outcome = await runTrace(repo, new Date().toISOString());
