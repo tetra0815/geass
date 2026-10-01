@@ -79,7 +79,7 @@ On a feature branch, call `rdra_review_status`.
 - `design.status` is `pending`: a review is already open. Tell the user the URL and go to Step 6.
 - `design.approval` is `approved`: nothing to do unless the user asked for changes — go to Step 7.
 - `design.required` is `false` and `design.status` is `none`: this feature changes nothing the design has to follow. Tell the user they can go straight to `superpowers:writing-plans`, and stop unless they asked for design changes.
-- `design.required` is `null`: the feature's diff base cannot be found. Report it and stop.
+- `design.required` is `null`: the feature's diff base cannot be found, or the model YAML cannot be read. Report it and stop.
 - Otherwise continue with Step 2.
 
 ### Step 2: Take over the existing system (once per project)
@@ -89,6 +89,7 @@ If `docs/design/` has no components and no tables yet, but the codebase already 
 1. Read them and draft the components and tables that already exist. For each, infer which RDRA information or external system it realizes.
 2. Show the draft as one table and confirm or correct it with the user, one open question at a time.
 3. Add what was agreed with `rdra_upsert`. It is part of this feature's design change and goes through the same review.
+4. Everything taken over counts as added in this feature's design change, so `/trace` will require it. Tell the user, and in the plan name all taken-over components and tables on one task — e.g. "Record the existing design" — whose work is only to commit the design model. If the user prefers, do the takeover as its own design-only feature merged to develop first, so later features start from it.
 
 ### Step 3: Understand where the design stands
 

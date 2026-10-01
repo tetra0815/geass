@@ -76,6 +76,21 @@ describe("MCP tools", () => {
     });
   });
 
+  it("refuses a design review request when the RDRA approval is stale", async () => {
+    const repo = await makeFeatureRepo(rdraFiles());
+    const { call, store } = await connect(repo);
+    const feature = (await resolveFeature(repo)) as Feature;
+    const T = "2026-10-01T10:00:00+09:00";
+    await writeReview(
+      feature.reviewFile,
+      decide(requestReview(emptyReview(), { now: T }), { decision: "approved", comments: [], hash: rdraHash(store.model), now: T }),
+    );
+    await call("rdra_upsert", { items: [{ kind: "information", element: { id: "inf.order", attributes: ["注文番号", "合計金額"] } }] });
+    const res = await call("rdra_request_review", { stage: "design" });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("/rdra");
+  });
+
   it("reports the design as not required for a feature without design work", async () => {
     const { call } = await connect(await makeFeatureRepo(rdraFiles()));
     expect((await call("rdra_review_status")).json().design).toEqual({ status: "none", approval: "none", lastRound: null, required: false });

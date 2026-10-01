@@ -57,7 +57,7 @@ export async function checkFeatureApproval(repo: string): Promise<ApprovalResult
     model = parseModel(await readModelFiles(repo));
   } catch (e) {
     if (!(e instanceof ModelParseError)) throw e;
-    return { state: "error", message: `RDRA の YAML を読めません: ${e.message}`, featureId: feature.id };
+    return { state: "error", message: `RDRA・設計の YAML を読めません: ${e.message}`, featureId: feature.id };
   }
   let review;
   try {

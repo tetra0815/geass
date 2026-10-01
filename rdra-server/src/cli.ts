@@ -140,7 +140,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return 0;
     } catch (e) {
       if (!(e instanceof ModelParseError)) throw e;
-      io.err(`RDRA の YAML を読めません: ${e.message}\n`);
+      io.err(`RDRA・設計の YAML を読めません: ${e.message}\n`);
       return 3;
     }
   }

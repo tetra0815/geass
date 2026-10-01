@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { extname, join, normalize, sep } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { designRequired } from "./approval.js";
-import { diffAgainstBase } from "./base-diff.js";
+import { NO_BASE_MESSAGE, diffAgainstBase } from "./base-diff.js";
 import { isInvalidFeature, resolveFeature, stageReviewFile } from "./feature.js";
 import { readLayout } from "./layout.js";
 import { rdraHash } from "./model/hash.js";
@@ -15,7 +15,7 @@ import { isViewKey, type Positions } from "./model/view-keys.js";
 import type { Operation } from "./operations.js";
 import { ReviewError, approvalState, decide, readReview, writeReview, type ReviewComment } from "./review.js";
 import type { RdraStore } from "./store.js";
-import { hasErrors, validate } from "./validate.js";
+import { hasErrors, validate, validateDesignChanges } from "./validate.js";
 
 export interface HttpDeps {
   store: RdraStore;
@@ -159,6 +159,17 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
       if (body.version !== store.version) throw new HttpError(409, "レビュー中にモデルが変更されました。最新の状態を確認してください");
       if (decision === "approved" && (store.parseError || hasErrors(validate(store.model)))) {
         throw new HttpError(422, "エラーが残っているため承認できません");
+      }
+      if (stage === "design" && decision === "approved") {
+        if (approvalState(await readReview(feature.reviewFile), rdraHash(store.model)).state !== "approved") {
+          throw new HttpError(422, "RDRA が承認されていないため、設計を承認できません。先に RDRA の承認を受けてください");
+        }
+        const diff = await diffAgainstBase(store.repoRoot, store.model);
+        if (!diff.base) throw new HttpError(422, NO_BASE_MESSAGE);
+        const gaps = validateDesignChanges(store.model, diff.changes).filter((i) => i.level === "error");
+        if (gaps.length > 0) {
+          throw new HttpError(422, `設計がこの feature の RDRA の変更を実現していないため承認できません:\n${gaps.map((i) => `- ${i.message}`).join("\n")}`);
+        }
       }
       try {
         const next = decide(await readReview(stageReviewFile(feature, stage)), {

@@ -35,7 +35,7 @@ export function ReviewPanel(props: Props) {
   const canApprove = pending && errors.length === 0 && !state.parseError && !busy;
   const canReject = pending && drafts.length > 0 && !busy;
   const lastRound = (stage === "design" ? state.design.review : state.review)?.rounds.at(-1);
-  const designLabel = state.design.approval === "none" && !state.design.required ? DESIGN_NOT_REQUIRED : STATUS_LABELS[state.design.approval];
+  const designLabel = !state.design.required && state.design.approval !== "pending" && state.design.approval !== "approved" ? DESIGN_NOT_REQUIRED : STATUS_LABELS[state.design.approval];
 
   const add = () => {
     if (text.trim() === "") return;

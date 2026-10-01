@@ -23,8 +23,8 @@ geass gains a design model next to the RDRA model: the components the system run
 
 1. Approved RDRA changes stay approved.
 2. Run `/trace` again on features that had passed it: the trace record format changed and old records are ignored.
-3. A feature in progress whose RDRA change touches information, external systems or state models now needs `/design` before planning. Features that do not, plan as before.
-4. The first `/design` run in a project offers to take over the existing schema and deployment into the design model.
+3. A feature in progress needs `/design` before planning only if it changes a design element or its RDRA change is not yet realized by the design (an information element without a table or holding component, an external system without a component, a stored state model missing from its table). Features that do not, plan as before.
+4. The first `/design` run in a project offers to take over the existing schema and deployment into the design model. Everything taken over counts as added in that feature, so its plan names it on one task (or do the takeover as its own feature first).
 
 ## 0.12.0
 

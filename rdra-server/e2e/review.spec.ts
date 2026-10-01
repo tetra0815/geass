@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { DESIGN_REVIEWS_DIR, REVIEWS_DIR } from "../src/feature.js";
 import { RDRA_DIR } from "../src/model/io.js";
-import { emptyReview, requestReview, type ReviewRecord } from "../src/review.js";
+import { decide, emptyReview, requestReview, type ReviewRecord } from "../src/review.js";
 import { sampleDesignFiles, sampleFiles } from "../test/fixtures.js";
 import { makeFeatureRepo } from "../test/helpers.js";
 
@@ -128,6 +128,9 @@ test("a decision right after an edit waits for the edited model to load", async 
 });
 
 test("review the design in its own views and approve it", async ({ page }) => {
+  const rdraHash = spawnSync("node", [cli, "hash", "--repo", repo], { encoding: "utf8" }).stdout.trim();
+  const now = new Date().toISOString();
+  await writeFile(reviewPath(), JSON.stringify(decide(requestReview(emptyReview(), { now }), { decision: "approved", comments: [], hash: rdraHash, now }), null, 2));
   const designReview = join(repo, DESIGN_REVIEWS_DIR, "001-demo.json");
   await mkdir(dirname(designReview), { recursive: true });
   await writeFile(designReview, JSON.stringify(requestReview(emptyReview(), { now: new Date().toISOString() }), null, 2));

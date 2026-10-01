@@ -9,7 +9,7 @@ import { DESIGN_REVIEWS_DIR, REVIEWS_DIR } from "../src/feature.js";
 import { startHttp, type RdraHttp } from "../src/http.js";
 import { rdraHash } from "../src/model/hash.js";
 import { RDRA_DIR } from "../src/model/io.js";
-import { emptyReview, requestReview, writeReview } from "../src/review.js";
+import { decide, emptyReview, requestReview, writeReview } from "../src/review.js";
 import { RdraStore } from "../src/store.js";
 import { sampleFiles } from "./fixtures.js";
 import { makeFeatureRepo, makeRepo } from "./helpers.js";
@@ -39,6 +39,9 @@ async function setup(opts: { webRoot?: string | null; feature?: boolean } = {}) 
   return { repo, store, http, call, reviewEvents, reviewFile: join(repo, REVIEWS_DIR, "001-demo.json") };
 }
 
+const approveRdra = (reviewFile: string, store: RdraStore) =>
+  writeReview(reviewFile, decide(requestReview(emptyReview(), { now: "t" }), { decision: "approved", comments: [], hash: rdraHash(store.model), now: "t" }));
+
 describe("HTTP API", () => {
   it("serves the current state", async () => {
     const { call, store } = await setup();
@@ -51,8 +54,9 @@ describe("HTTP API", () => {
   });
 
   it("records design decisions in docs/design/reviews with the full hash", async () => {
-    const { call, store, repo } = await setup();
+    const { call, store, repo, reviewFile } = await setup();
     const designFile = join(repo, DESIGN_REVIEWS_DIR, "001-demo.json");
+    await approveRdra(reviewFile, store);
     await writeReview(designFile, requestReview(emptyReview(), { now: "t" }));
     expect((await call("GET", "/api/state")).body.design).toMatchObject({ approval: "pending", required: false, review: { status: "pending" } });
     expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version, stage: "nope" })).status).toBe(400);
@@ -60,7 +64,36 @@ describe("HTTP API", () => {
     const res = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version, stage: "design" });
     expect(res.status).toBe(200);
     expect(JSON.parse(await readFile(designFile, "utf8"))).toMatchObject({ status: "approved", approved_hash: store.version });
-    expect((await call("GET", "/api/state")).body).toMatchObject({ approval: "none", design: { approval: "approved" } });
+    expect((await call("GET", "/api/state")).body).toMatchObject({ approval: "approved", design: { approval: "approved" } });
+  });
+
+  it("refuses a design approval while the RDRA is not approved", async () => {
+    const { call, store, repo } = await setup();
+    await writeReview(join(repo, DESIGN_REVIEWS_DIR, "001-demo.json"), requestReview(emptyReview(), { now: "t" }));
+    const res = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version, stage: "design" });
+    expect(res.status).toBe(422);
+    expect(res.body.message).toContain("RDRA が承認されていないため、設計を承認できません");
+  });
+
+  it("refuses a design approval while the design does not realize the change", async () => {
+    const { call, store, repo, reviewFile } = await setup();
+    await store.apply([{ op: "upsert", kind: "information", element: { id: "inf.order", attributes: ["注文番号", "合計金額"] } }]);
+    await approveRdra(reviewFile, store);
+    await writeReview(join(repo, DESIGN_REVIEWS_DIR, "001-demo.json"), requestReview(emptyReview(), { now: "t" }));
+    const res = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version, stage: "design" });
+    expect(res.status).toBe(422);
+    expect(res.body.message).toContain("設計がこの feature の RDRA の変更を実現していないため承認できません");
+    expect(res.body.message).toContain("inf.order");
+    const rejected = await call("POST", "/api/review/decision", { decision: "rejected", comments: [{ target: "inf.order", text: "テーブルを足して" }], version: store.version, stage: "design" });
+    expect(rejected.status).toBe(200);
+  });
+
+  it("refuses a design decision on a stale version and approves a clean design", async () => {
+    const { call, store, repo, reviewFile } = await setup();
+    await approveRdra(reviewFile, store);
+    await writeReview(join(repo, DESIGN_REVIEWS_DIR, "001-demo.json"), requestReview(emptyReview(), { now: "t" }));
+    expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: "sha256:stale", stage: "design" })).status).toBe(409);
+    expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version, stage: "design" })).status).toBe(200);
   });
 
   it("says the design is required once the feature changes it", async () => {

@@ -34101,6 +34101,18 @@ async function startHttp(deps, port = 0) {
       if (decision === "approved" && (store.parseError || hasErrors(validate2(store.model)))) {
         throw new HttpError(422, "\u30A8\u30E9\u30FC\u304C\u6B8B\u3063\u3066\u3044\u308B\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093");
       }
+      if (stage === "design" && decision === "approved") {
+        if (approvalState(await readReview(feature.reviewFile), rdraHash(store.model)).state !== "approved") {
+          throw new HttpError(422, "RDRA \u304C\u627F\u8A8D\u3055\u308C\u3066\u3044\u306A\u3044\u305F\u3081\u3001\u8A2D\u8A08\u3092\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B RDRA \u306E\u627F\u8A8D\u3092\u53D7\u3051\u3066\u304F\u3060\u3055\u3044");
+        }
+        const diff2 = await diffAgainstBase(store.repoRoot, store.model);
+        if (!diff2.base) throw new HttpError(422, NO_BASE_MESSAGE);
+        const gaps = validateDesignChanges(store.model, diff2.changes).filter((i) => i.level === "error");
+        if (gaps.length > 0) {
+          throw new HttpError(422, `\u8A2D\u8A08\u304C\u3053\u306E feature \u306E RDRA \u306E\u5909\u66F4\u3092\u5B9F\u73FE\u3057\u3066\u3044\u306A\u3044\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093:
+${gaps.map((i) => `- ${i.message}`).join("\n")}`);
+        }
+      }
       try {
         const next = decide(await readReview(stageReviewFile(feature, stage)), {
           decision,

@@ -28552,7 +28552,7 @@ async function checkFeatureApproval(repo) {
     model = parseModel(await readModelFiles(repo));
   } catch (e) {
     if (!(e instanceof ModelParseError)) throw e;
-    return { state: "error", message: `RDRA \u306E YAML \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`, featureId: feature.id };
+    return { state: "error", message: `RDRA\u30FB\u8A2D\u8A08\u306E YAML \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}`, featureId: feature.id };
   }
   let review;
   try {
@@ -32744,6 +32744,18 @@ async function startHttp(deps, port = 0) {
       if (body.version !== store.version) throw new HttpError(409, "\u30EC\u30D3\u30E5\u30FC\u4E2D\u306B\u30E2\u30C7\u30EB\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002\u6700\u65B0\u306E\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044");
       if (decision === "approved" && (store.parseError || hasErrors(validate2(store.model)))) {
         throw new HttpError(422, "\u30A8\u30E9\u30FC\u304C\u6B8B\u3063\u3066\u3044\u308B\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093");
+      }
+      if (stage === "design" && decision === "approved") {
+        if (approvalState(await readReview(feature.reviewFile), rdraHash(store.model)).state !== "approved") {
+          throw new HttpError(422, "RDRA \u304C\u627F\u8A8D\u3055\u308C\u3066\u3044\u306A\u3044\u305F\u3081\u3001\u8A2D\u8A08\u3092\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B RDRA \u306E\u627F\u8A8D\u3092\u53D7\u3051\u3066\u304F\u3060\u3055\u3044");
+        }
+        const diff2 = await diffAgainstBase(store.repoRoot, store.model);
+        if (!diff2.base) throw new HttpError(422, NO_BASE_MESSAGE);
+        const gaps = validateDesignChanges(store.model, diff2.changes).filter((i) => i.level === "error");
+        if (gaps.length > 0) {
+          throw new HttpError(422, `\u8A2D\u8A08\u304C\u3053\u306E feature \u306E RDRA \u306E\u5909\u66F4\u3092\u5B9F\u73FE\u3057\u3066\u3044\u306A\u3044\u305F\u3081\u627F\u8A8D\u3067\u304D\u307E\u305B\u3093:
+${gaps.map((i) => `- ${i.message}`).join("\n")}`);
+        }
       }
       try {
         const next = decide(await readReview(stageReviewFile(feature, stage)), {
@@ -42487,7 +42499,7 @@ ${USAGE}`);
       return 0;
     } catch (e) {
       if (!(e instanceof ModelParseError)) throw e;
-      io.err(`RDRA \u306E YAML \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}
+      io.err(`RDRA\u30FB\u8A2D\u8A08\u306E YAML \u3092\u8AAD\u3081\u307E\u305B\u3093: ${e.message}
 `);
       return 3;
     }
