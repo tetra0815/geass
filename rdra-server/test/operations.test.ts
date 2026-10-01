@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OperationError, applyOperations } from "../src/operations.js";
-import { sampleModel } from "./fixtures.js";
+import { sampleModel, sampleFullModel } from "./fixtures.js";
 
 describe("applyOperations", () => {
   it("adds a new element with defaults and leaves the input untouched", () => {
@@ -93,5 +93,22 @@ describe("applyOperations", () => {
     const { model: next, removedRelations } = applyOperations(model, [{ op: "delete", id: "uc.place-order" }]);
     expect(next.principles[0].scope).toEqual([]);
     expect(removedRelations).toContainEqual({ from: "pr.audit", to: "uc.place-order", kind: "pr.scope", attrs: {} });
+  });
+
+  it("detaches design references when an RDRA element is deleted", () => {
+    const { model, removedRelations } = applyOperations(sampleFullModel(), [{ op: "delete", id: "ext.payment-gateway" }]);
+    expect(model.components.find((c) => c.id === "comp.payment-adapter")!.realizes).toEqual([]);
+    expect(removedRelations.map((r) => `${r.kind}|${r.from}`)).toContain("comp.realizes|comp.payment-adapter");
+  });
+
+  it("refuses to leave a table without its store or its information", () => {
+    expect(() => applyOperations(sampleFullModel(), [{ op: "delete", id: "comp.db" }])).toThrow(/comp\.db を削除できません.*tbl\.orders/);
+    expect(() => applyOperations(sampleFullModel(), [{ op: "delete", id: "inf.order" }])).toThrow(/inf\.order を削除できません.*tbl\.orders/);
+    expect(() =>
+      applyOperations(sampleFullModel(), [{ op: "unlink", relation: "tbl.store", from: "tbl.orders", to: "comp.db" }]),
+    ).toThrow(OperationError);
+    expect(() =>
+      applyOperations(sampleFullModel(), [{ op: "unlink", relation: "tbl.realizes", from: "tbl.orders", to: "inf.order" }]),
+    ).toThrow(/tbl\.orders/);
   });
 });

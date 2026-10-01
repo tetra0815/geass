@@ -86,6 +86,14 @@ function remove(model: Model, id: string): Relation[] {
   (model[found.kind.key] as AnyElement[]).splice(found.index, 1);
   const incoming = relationsOf(model).filter((r) => pointsAt(r, id));
   for (const r of incoming) detach(model, r.kind, r.from, r.to);
+  for (const from of new Set(incoming.map((r) => r.from))) {
+    try {
+      reparse(model, from);
+    } catch (e) {
+      if (!(e instanceof OperationError)) throw e;
+      throw new OperationError(`${id} を削除できません。${from} が必要としています（先に ${from} を変更してください）: ${e.message}`);
+    }
+  }
   return [...outgoing, ...incoming];
 }
 
@@ -128,6 +136,7 @@ export function applyOperations(input: Model, ops: Operation[]): { model: Model;
         if (!detach(model, op.relation, op.from, op.to)) {
           throw new OperationError(`${op.from} から ${op.to} への ${op.relation} は存在しません`);
         }
+        reparse(model, op.from);
         break;
     }
   }
