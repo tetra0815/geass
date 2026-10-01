@@ -1,7 +1,7 @@
 # Mock/Stub Strategy & Test Data Management Template
 
 **Target**: `docs/testing/local-testing.md`
-**Note**: Project-wide policy such as test-type strategy (unit/integration/E2E) and coverage targets is defined in the Constitution. This document covers only the implementation-level detail of what gets replaced when writing tests, and how.
+**Note**: Project-wide policy such as test-type strategy (unit/integration/E2E) and coverage targets is defined as `engineering` principles in the RDRA model (`docs/rdra/principles.yaml`). This document covers only the implementation-level detail of what gets replaced when writing tests, and how.
 
 ## Mock/Stub Strategy
 

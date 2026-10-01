@@ -1,10 +1,10 @@
 ---
 name: "feature-start"
-description: "Create a dedicated branch and git worktree for a new feature, open a tracking GitHub issue, open a new WezTerm tab, and hand off to /design-spec there (which itself hands off to /specify once design docs are written)."
-argument-hint: "Describe the feature you want to specify"
-compatibility: "Requires a .geass/ project directory, git flow, and WezTerm or tmux"
+description: "Start a feature the git-flow way: open a tracking GitHub issue, cut feature/<issue>-<slug> from develop into its own worktree, and open a new terminal tab that runs /rdra there."
+argument-hint: "Describe the feature"
+compatibility: "Requires git, git-flow branch settings (optional), gh for GitHub issues, and WezTerm or tmux"
 metadata:
-  author: "sommelier"
+  author: "geass"
 user-invocable: true
 disable-model-invocation: false
 ---
@@ -15,88 +15,40 @@ disable-model-invocation: false
 $ARGUMENTS
 ```
 
-You **MUST** consider the user input before proceeding. If it is empty: ERROR
-"No feature description provided" and stop.
-
-## Precondition
-
-This command only runs while the root worktree is checked out on a `release/*`
-branch. That is enforced by the geass plugin's own `hooks/pretooluse_gate.py`,
-a PreToolUse hook on this Skill — if this command's instructions are running
-at all, the precondition already passed. `create-feature-worktree.sh` itself
-also re-checks this immediately before branching (belt-and-suspenders against
-the hook not firing for some reason) and fails loudly if it doesn't hold.
+If it is empty: ERROR "No feature description provided" and stop.
 
 ## Outline
 
-1. Generate a concise short name (2-4 words, English/ASCII only, action-noun
-   format, e.g. "add-user-auth") for the feature — regardless of what
-   language `$ARGUMENTS` is written in. Branch and worktree names must stay
-   ASCII; the script's own slugifier strips non-ASCII characters entirely
-   and would otherwise produce a garbage branch name (or worse, a model
-   that bypasses the script may be tempted to write the branch name in the
-   description's own language instead — always translate to a short English
-   slug here first). Call this `SHORT_NAME`.
+1. Make a short English slug for the feature (2-4 words, lowercase ASCII letters, digits and hyphens, e.g. `order-cancel`), whatever language the description is in. Call it `SLUG`.
 
-2. Run, from the repository root:
+2. Open a tracking issue when `origin` is a GitHub remote (`git remote get-url origin` contains `github.com`):
+
    ```bash
-   "${CLAUDE_PLUGIN_ROOT}/scripts/create-feature-worktree.sh" --slug "$SHORT_NAME" "$ARGUMENTS"
+   gh issue create --title "Feature: <description>" --body-file - <<'EOF'
+   <description, verbatim>
+   EOF
    ```
-   Pass `$ARGUMENTS` unmodified (in its original language) after `--slug
-   $SHORT_NAME` — it still drives the GitHub issue title/body and the
-   `/design-spec` handoff prompt below; only the branch/worktree naming
-   needs the English override.
-3. If the script exits non-zero: report its stderr output to the user verbatim
-   and STOP. Do not retry automatically, do not create any files yourself.
-4. On success, the script's stdout has five lines: `BRANCH_NAME`,
-   `WORKTREE_PATH`, `SPEC_DIR`, `BASE_BRANCH`, `BASE_COMMIT`. By the time it
-   returns, it has already:
-   - Pulled the root worktree's current branch (`--ff-only`, no-op if it has
-     no upstream) so the new feature branch is based on the latest remote
-     state
-   - Created branch `BRANCH_NAME` from the root worktree's (now up to date)
-     current HEAD (the new worktree checks out a new branch; the root
-     worktree's own branch is unaffected beyond the fast-forward pull above)
-   - Created a git worktree at `WORKTREE_PATH`
-   - Written `WORKTREE_PATH/.claude/settings.local.json` pinning that worktree
-     to the Sonnet model
-   - Opened a new WezTerm tab, cd'd into `WORKTREE_PATH`, and launched `claude`
-     there with a prompt that runs `/design-spec` using
-     `SPECIFY_FEATURE_DIRECTORY=SPEC_DIR` (already decided — the new session
-     must not recompute the feature name)
 
-5. **Open a tracking issue** (GitHub remotes only):
-   - Get the remote with `git config --get remote.origin.url`. If it is not a
-     GitHub URL, skip this step silently — do not attempt to create an issue
-     against a non-GitHub remote.
-   - Use the GitHub MCP server's `create_issue` tool to open exactly one issue
-     in the repository matching that remote:
-     - Title: `Feature: <FEATURE_DESCRIPTION>` (the same description text
-       passed to this command, not `BRANCH_NAME`)
-     - Body: the feature description as given, plus the branch name
-       (`BRANCH_NAME`) so the issue links back to the work
-   - This is one issue per feature — do not create additional issues here for
-     individual design docs or tasks (those come later, from `taskstoissues`).
-   - If issue creation fails for any reason, report the failure to the user
-     but do not treat it as fatal — the branch/worktree/session dispatch above
-     already succeeded and should not be undone.
+   `gh` prints the issue URL; its last path segment is the issue number `NUMBER`. If the remote is not GitHub, or `gh` fails, continue without an issue and remember why for the report.
 
-6. Report completion to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
-   `SPEC_DIR`, `BASE_BRANCH`, `BASE_COMMIT`, and the issue URL (or a note
-   that issue creation was skipped or failed) — `BASE_BRANCH`/`BASE_COMMIT`
-   let the user immediately confirm the feature branch was actually cut from
-   the release branch they expect, rather than having to dig this up later.
+3. Name the branch `NAME="<NUMBER>-<SLUG>"` (just `<SLUG>` without an issue) and run, passing the prompt as one argument:
 
-**IMPORTANT**: Do **not** create `spec.md` or any other feature file yourself.
-Actual spec creation happens in the new WezTerm tab's session, inside the
-isolated worktree. This command's only job is to dispatch to that session.
+   ```bash
+   PROMPT=$(cat <<'EOF'
+   /rdra <description, verbatim>
+   EOF
+   )
+   "${CLAUDE_PLUGIN_ROOT}/scripts/start-worktree.sh" feature "$NAME" "$PROMPT"
+   ```
+
+4. If the script exits non-zero, report its stderr verbatim and stop. Do not retry and do not create the branch yourself.
+
+5. Report `BRANCH_NAME`, `WORKTREE_PATH`, `BASE_BRANCH`, `START_POINT` from the script's output and the issue URL (or why there is none).
+
+Do not model, design or implement anything here — that happens in the new tab, starting with `/rdra`.
 
 ## Done When
 
-- [ ] `create-feature-worktree.sh` exited 0, or its failure was reported
-  verbatim and the command stopped
-- [ ] Tracking issue created for GitHub remotes, or skipped/failed and
-  reported as such
-- [ ] Completion reported to the user with `BRANCH_NAME`, `WORKTREE_PATH`,
-  `SPEC_DIR`, `BASE_BRANCH`, `BASE_COMMIT`, and issue status
-- [ ] No spec files were created by this command
+- [ ] The script exited 0, or its error was reported verbatim
+- [ ] An issue was created for GitHub remotes, or its absence was explained
+- [ ] The branch, worktree, base and issue were reported

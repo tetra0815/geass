@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for the geass worktree harness.
+"""PreToolUse gate for geass.
 
-Blocks Skill invocations that need a precondition geass itself does not
-otherwise enforce:
+Every decision is made by `rdra-server/dist/cli.js gate` (rdra-server/src/
+gate.ts), so the feature, RDRA-approval and trace rules live in one place.
+This hook only picks the tool calls that need a decision:
 
-  - feature-start: root worktree must be on a <git-flow release
-    prefix>* branch (git config gitflow.prefix.release, default "release/").
-  - fix-start: root worktree must be on the git-flow master branch
-    (git config gitflow.branch.master, default "main") OR a <git-flow
-    release prefix>* branch -- a bugfix may legitimately start from either.
-  - superpowers:executing-plans / superpowers:subagent-driven-development:
-    requires an analyze marker for the current feature (written by
-    posttooluse_analyze_marker.py). Optional -- controlled by
-    require_analyze_before_execute in .geass/init-options.json (default
-    true).
+  - Skill superpowers:writing-plans / executing-plans /
+    subagent-driven-development (namespaced or bare) on a feature branch.
+  - Edit / Write / MultiEdit of a file under docs/rdra/reviews/ (review
+    records are written only by the review UI).
 
-The executing-plans checks are a no-op outside a geass feature
-context (check-prerequisites.sh fails), so they never block work unrelated to
-the geass spec pipeline.
+Everything else passes without starting node. A gated call whose decision
+cannot be obtained is denied: an approval that cannot be verified must not
+be treated as granted, and neither may an unexpected error while deciding
+(Claude Code runs the tool when a hook crashes). The hook keeps to Python 3.8
+syntax because macOS still ships Python 3.9 as /usr/bin/python3.
 """
 import json
 import os
 import subprocess
 import sys
+from typing import List, Optional
 
-GATED_SKILLS = {
-    "feature-start",
-    "fix-start",
-    "executing-plans",
-    "subagent-driven-development",
-}
+GATED_SKILLS = {"writing-plans", "executing-plans", "subagent-driven-development"}
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit"}
+REVIEWS_SEGMENT = "/docs/rdra/reviews/"
 
 
 def deny(reason: str) -> dict:
@@ -42,155 +37,81 @@ def deny(reason: str) -> dict:
     }
 
 
-def read_init_option_bool(repo_root: str, key: str, default: bool) -> bool:
-    f = os.path.join(repo_root, ".geass", "init-options.json")
-    if not os.path.isfile(f):
-        return default
+def repo_root_of_cwd() -> str:
     try:
-        with open(f, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (json.JSONDecodeError, OSError):
-        return default
-    val = data.get(key)
-    return val if isinstance(val, bool) else default
+        out = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        out = ""
+    return out or os.getcwd()
 
 
-def resolve_feature_paths(repo_root: str):
+def gate_problem(args: List[str]) -> Optional[str]:
+    """Return a deny reason, or None when the gate allows the call."""
     plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
-    prereq = os.path.join(plugin_root, "scripts", "bash", "check-prerequisites.sh")
+    cli = os.path.join(plugin_root, "rdra-server", "dist", "cli.js")
+    root = repo_root_of_cwd()
     try:
         result = subprocess.run(
-            [prereq, "--paths-only", "--json"],
+            ["node", cli, "gate", "--repo", root, *args],
             capture_output=True,
             text=True,
-            cwd=repo_root,
+            cwd=root,
+            timeout=60,
         )
-    except OSError:
-        # check-prerequisites.sh isn't resolvable (e.g. CLAUDE_PLUGIN_ROOT is
-        # unset, or this repo has no .geass/ feature context yet) -- nothing
-        # to gate.
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"geass のゲートを確認できません（Node 22.13 以上が必要です）: {e}"
+    if result.returncode == 0:
         return None
-    if result.returncode != 0:
-        return None
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return None
-
-
-def root_worktree_branch(repo_root: str):
-    """Return the branch name checked out in the main worktree, or None if
-    detached/unknown. `git worktree list` always lists the main worktree first,
-    regardless of which worktree this hook is invoked from."""
-    result = subprocess.run(
-        ["git", "worktree", "list", "--porcelain"],
-        capture_output=True,
-        text=True,
-        cwd=repo_root,
+    unverifiable = "geass のゲートを確認できません: " + (
+        result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
     )
-    if result.returncode != 0:
+    lines = result.stdout.strip().splitlines()
+    try:
+        data = json.loads(lines[-1]) if lines else None
+    except json.JSONDecodeError:
+        return unverifiable
+    if isinstance(data, dict) and data.get("decision") == "deny":
+        reason = data.get("reason")
+        if isinstance(reason, str) and reason:
+            return reason
+    return unverifiable
+
+
+def gate_args(data: object) -> Optional[List[str]]:
+    """Return the `gate` arguments for a call that needs a decision, else None."""
+    if not isinstance(data, dict):
         return None
-    lines = result.stdout.splitlines()
-    for i, line in enumerate(lines):
-        if not line.startswith("worktree "):
-            continue
-        for follow in lines[i + 1:]:
-            if follow.startswith("worktree "):
-                break
-            if follow.startswith("branch refs/heads/"):
-                return follow[len("branch refs/heads/"):]
-            if follow == "detached":
-                return None
+    tool_name = data.get("tool_name")
+    tool_input = data.get("tool_input")
+    if not isinstance(tool_input, dict):
         return None
+
+    if tool_name in EDIT_TOOLS:
+        path = tool_input.get("file_path")
+        if not isinstance(path, str) or not path:
+            return None
+        absolute = os.path.abspath(path)
+        if REVIEWS_SEGMENT not in absolute.replace(os.sep, "/"):
+            return None
+        return ["--path", absolute]
+    if tool_name == "Skill":
+        skill = tool_input.get("skill")
+        if not isinstance(skill, str) or skill.rsplit(":", 1)[-1] not in GATED_SKILLS:
+            return None
+        return ["--skill", skill]
     return None
 
 
-def git_flow_release_prefix(repo_root: str) -> str:
-    result = subprocess.run(
-        ["git", "config", "gitflow.prefix.release"],
-        capture_output=True,
-        text=True,
-        cwd=repo_root,
-    )
-    prefix = result.stdout.strip()
-    return prefix if result.returncode == 0 and prefix else "release/"
-
-
-def git_flow_master_branch(repo_root: str) -> str:
-    """Return the configured git-flow master branch name, defaulting to
-    'main' if gitflow.branch.master is unset."""
-    result = subprocess.run(
-        ["git", "config", "gitflow.branch.master"],
-        capture_output=True,
-        text=True,
-        cwd=repo_root,
-    )
-    branch = result.stdout.strip()
-    return branch if result.returncode == 0 and branch else "main"
-
-
 def main() -> int:
-    data = json.load(sys.stdin)
-    if data.get("tool_name") != "Skill":
+    args = gate_args(json.load(sys.stdin))
+    if args is None:
         return 0
-
-    skill = data.get("tool_input", {}).get("skill", "")
-    # Plugin skills may be passed either bare ("plan") or namespaced
-    # ("geass:plan") -- match on the unqualified name either way rather than
-    # assume one form, since a mismatch here would make the gate a silent
-    # no-op.
-    if ":" in skill:
-        skill = skill.rsplit(":", 1)[-1]
-    if skill not in GATED_SKILLS:
-        return 0
-
-    repo_root = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
-    ).stdout.strip() or os.getcwd()
-
-    if skill == "feature-start":
-        branch = root_worktree_branch(repo_root)
-        prefix = git_flow_release_prefix(repo_root)
-        if not branch or not branch.startswith(prefix):
-            print(json.dumps(deny(
-                f"ルートworktreeが {prefix}* ブランチではありません"
-                f"（現在: {branch or '(detached)'}）。"
-                "/feature-start の前に、ルートworktreeで "
-                "`git flow release start <version>` を実行してください。"
-            )))
-        return 0
-
-    if skill == "fix-start":
-        branch = root_worktree_branch(repo_root)
-        master_branch = git_flow_master_branch(repo_root)
-        prefix = git_flow_release_prefix(repo_root)
-        if not branch or not (branch == master_branch or branch.startswith(prefix)):
-            print(json.dumps(deny(
-                f"ルートworktreeが {master_branch} または {prefix}* ブランチではありません"
-                f"（現在: {branch or '(detached)'}）。"
-                "/fix-start の前に、ルートworktreeで "
-                f"`git checkout {master_branch}` または "
-                "`git flow release start <version>` を実行してください。"
-            )))
-        return 0
-
-    paths = resolve_feature_paths(repo_root)
-    if paths is None:
-        # Not currently inside a geass feature context -- nothing to gate.
-        return 0
-
-    # executing-plans / subagent-driven-development
-    if not read_init_option_bool(repo_root, "require_analyze_before_execute", True):
-        return 0
-    feature_dir = paths.get("FEATURE_DIR", "")
-    if not feature_dir:
-        return 0
-    marker = os.path.join(repo_root, ".geass", "state", os.path.basename(feature_dir) + ".analyzed")
-    if not os.path.isfile(marker):
-        print(json.dumps(deny(
-            f"analyze has not been run for this feature yet. "
-            f"Run /analyze before {skill}."
-        )))
+    try:
+        problem = gate_problem(args)
+    except Exception as e:  # a gated call must never be allowed by a crash
+        problem = f"geass のゲートを確認できません: {e!r}"
+    if problem:
+        print(json.dumps(deny(problem)))
     return 0
 
 

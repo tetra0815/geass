@@ -1,12 +1,12 @@
 {
   "name": "geass",
-  "description": "Self-contained spec-driven development harness for Claude Code: a full fork of spec-kit's spec/plan/tasks/analyze pipeline plus a git-flow release/hotfix worktree dispatcher (feature-start, fix-start), gated on the root worktree's git-flow branch state. No spec-kit installation required.",
-  "version": "0.10.0",
+  "description": "RDRA-centric development harness for Claude Code: one RDRA model (principles, usecases with acceptance criteria, screens, events, information, states) as the source of requirements, human approval in a local review UI, a trace check that the implementation plan covers what was approved, and git-flow worktrees for features and hotfixes. Design, planning and implementation run on superpowers.",
+  "version": "0.12.0",
   "author": {
     "name": "tetra0815"
   },
   "homepage": "https://github.com/tetra0815/geass",
   "repository": "https://github.com/tetra0815/geass",
   "license": "MIT",
-  "keywords": ["git-flow", "worktree", "speckit", "release-management", "wezterm", "tmux"]
+  "keywords": ["rdra", "requirements", "git-flow", "worktree", "superpowers", "mcp", "wezterm", "tmux"]
 }

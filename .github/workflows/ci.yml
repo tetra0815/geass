@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rdra-server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rdra-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13"
+          cache: npm
+          cache-dependency-path: rdra-server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx vitest run
+      - name: Built dist/ is up to date
+        run: |
+          npm run build
+          git diff --exit-code -- dist
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --with pytest pytest tests
