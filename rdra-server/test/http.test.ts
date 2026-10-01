@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { REVIEWS_DIR } from "../src/feature.js";
 import { startHttp, type RdraHttp } from "../src/http.js";
+import { rdraHash } from "../src/model/hash.js";
 import { RDRA_DIR } from "../src/model/io.js";
 import { emptyReview, requestReview, writeReview } from "../src/review.js";
 import { RdraStore } from "../src/store.js";
@@ -47,6 +48,14 @@ describe("HTTP API", () => {
     expect(body.model.usecases[0].id).toBe("uc.place-order");
     expect(body.issues).toEqual([]);
     expect(body.layout["usecase-composite"]).toEqual({});
+  });
+
+  it("keeps an RDRA approval when only the design changes", async () => {
+    const { call, store, reviewFile } = await setup();
+    await writeReview(reviewFile, requestReview(emptyReview(), { now: "t" }));
+    expect((await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version })).status).toBe(200);
+    await store.apply([{ op: "upsert", kind: "components", element: { id: "comp.db", name: "業務 DB", type: "datastore" } }]);
+    expect((await call("GET", "/api/state")).body.approval).toBe("approved");
   });
 
   it("applies operations with optimistic locking", async () => {
@@ -113,7 +122,7 @@ describe("HTTP API", () => {
     const approved = await call("POST", "/api/review/decision", { decision: "approved", comments: [], version: store.version });
     expect(approved.status).toBe(200);
     const record = JSON.parse(await readFile(reviewFile, "utf8"));
-    expect(record).toMatchObject({ status: "approved", approved_hash: store.version });
+    expect(record).toMatchObject({ status: "approved", approved_hash: rdraHash(store.model) });
     expect(record.rounds).toHaveLength(2);
   });
 

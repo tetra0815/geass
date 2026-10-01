@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { modelHash } from "../src/model/hash.js";
+import { modelHash, rdraHash } from "../src/model/hash.js";
 import { parseModel } from "../src/model/io.js";
-import { sampleFiles, sampleModel } from "./fixtures.js";
+import { sampleDesignFiles, sampleFiles, sampleModel } from "./fixtures.js";
 
 describe("modelHash", () => {
   it("has the sha256 prefix", () => {
@@ -30,5 +30,20 @@ describe("modelHash", () => {
     const files = sampleFiles();
     files["actors.yaml"] = "- id: act.customer\n  name: 会員\n";
     expect(modelHash(parseModel(files))).not.toBe(modelHash(sampleModel()));
+  });
+});
+
+describe("rdraHash", () => {
+  it("equals the 0.12.0 model hash of a model without design", () => {
+    expect(rdraHash(sampleModel())).toBe("sha256:75a4f6a9a2097a51b8378c6d55dc682e456b911bfbed51a1b8ff29e950715469");
+  });
+
+  it("ignores design changes, while the full hash sees both layers", () => {
+    const full = parseModel({ ...sampleFiles(), ...sampleDesignFiles() });
+    expect(rdraHash(full)).toBe(rdraHash(sampleModel()));
+    expect(modelHash(full)).not.toBe(modelHash(sampleModel()));
+    const renamed = parseModel({ ...sampleFiles(), "actors.yaml": "- id: act.customer\n  name: 会員\n", ...sampleDesignFiles() });
+    expect(rdraHash(renamed)).not.toBe(rdraHash(full));
+    expect(modelHash(renamed)).not.toBe(modelHash(full));
   });
 });

@@ -7,6 +7,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { diffAgainstBase } from "./base-diff.js";
 import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { readLayout } from "./layout.js";
+import { rdraHash } from "./model/hash.js";
 import { ModelParseError } from "./model/io.js";
 import { isViewKey, type Positions } from "./model/view-keys.js";
 import type { Operation } from "./operations.js";
@@ -100,7 +101,7 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
       layout: await readLayout(store.repoRoot),
       feature: feature?.id ?? null,
       review,
-      approval: review ? approvalState(review, store.version).state : "none",
+      approval: review ? approvalState(review, rdraHash(store.model)).state : "none",
     };
   }
 
@@ -140,7 +141,7 @@ export async function startHttp(deps: HttpDeps, port = 0): Promise<RdraHttp> {
         throw new HttpError(422, "エラーが残っているため承認できません");
       }
       try {
-        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: store.version, now: now() });
+        const next = decide(await readReview(feature.reviewFile), { decision, comments, hash: rdraHash(store.model), now: now() });
         await writeReview(feature.reviewFile, next);
         return next;
       } catch (e) {

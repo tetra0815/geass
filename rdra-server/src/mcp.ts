@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { NO_BASE_MESSAGE, diffAgainstBase } from "./base-diff.js";
 import { isInvalidFeature, resolveFeature } from "./feature.js";
+import { rdraHash } from "./model/hash.js";
 import { ModelParseError } from "./model/io.js";
 import { KIND_KEYS } from "./model/kinds.js";
 import { RELATION_KINDS } from "./model/relations.js";
@@ -205,7 +206,7 @@ export function createMcpServer(deps: McpDeps): McpServer {
       const record = await readReview(feature.reviewFile);
       return json({
         status: record.status,
-        approval: approvalState(record, store.version).state,
+        approval: approvalState(record, rdraHash(store.model)).state,
         lastRound: record.rounds.at(-1) ?? null,
         url: deps.reviewUrl(),
       });

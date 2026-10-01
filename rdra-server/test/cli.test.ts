@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../src/cli.js";
 import { REVIEWS_DIR } from "../src/feature.js";
-import { modelHash } from "../src/model/hash.js";
+import { modelHash, rdraHash } from "../src/model/hash.js";
 import { RDRA_DIR } from "../src/model/io.js";
 import { nodeVersionError } from "../src/node-version.js";
 import { decide, emptyReview, requestReview, writeReview } from "../src/review.js";
-import { sampleFiles, sampleModel } from "./fixtures.js";
+import { sampleDesignFiles, sampleFiles, sampleFullModel, sampleModel } from "./fixtures.js";
 import { makeFeatureRepo, makeInvalidFeatureRepo, makeRepo, run } from "./helpers.js";
 
 const rdraFiles = () => Object.fromEntries(Object.entries(sampleFiles()).map(([f, c]) => [`${RDRA_DIR}/${f}`, c]));
@@ -48,7 +48,7 @@ describe("check-approval", () => {
     await writeReview(file, decide(rec, { decision: "rejected", comments: [{ target: null, text: "x" }], hash: "h", now: T }));
     expect(await check(repo)).toMatchObject({ code: 1, result: { state: "rejected" } });
 
-    rec = decide(rec, { decision: "approved", comments: [], hash: modelHash(sampleModel()), now: T });
+    rec = decide(rec, { decision: "approved", comments: [], hash: rdraHash(sampleModel()), now: T });
     await writeReview(file, rec);
     expect(await check(repo)).toMatchObject({ code: 0, result: { state: "approved" } });
 
@@ -144,11 +144,25 @@ describe("wait-review", () => {
 });
 
 describe("usage", () => {
+  it("prints the design hash with --stage design", async () => {
+    const repo = await makeRepo({
+      ...rdraFiles(),
+      ...Object.fromEntries(Object.entries(sampleDesignFiles()).map(([f, c]) => [`docs/${f}`, c])),
+    });
+    const rdra = capture();
+    expect(await runCli(["hash", "--repo", repo], rdra.io)).toBe(0);
+    expect(rdra.out.join("").trim()).toBe(rdraHash(sampleModel()));
+    const design = capture();
+    expect(await runCli(["hash", "--repo", repo, "--stage", "design"], design.io)).toBe(0);
+    expect(design.out.join("").trim()).toBe(modelHash(sampleFullModel()));
+    expect(await runCli(["hash", "--repo", repo, "--stage", "nope"], capture().io)).toBe(64);
+  });
+
   it("prints the hash and rejects unknown commands", async () => {
     const repo = await makeRepo(rdraFiles());
     const c = capture();
     expect(await runCli(["hash", "--repo", repo], c.io)).toBe(0);
-    expect(c.out.join("").trim()).toBe(modelHash(sampleModel()));
+    expect(c.out.join("").trim()).toBe(rdraHash(sampleModel()));
     expect(await runCli(["nope"], capture().io)).toBe(64);
     expect(await runCli(["check-approval"], capture().io)).toBe(64);
   });

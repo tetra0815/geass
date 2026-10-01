@@ -2,9 +2,9 @@ import { relative } from "node:path";
 import { diffModels } from "./diff.js";
 import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { lastCommitTouching, readModelFilesAt } from "./git.js";
-import { modelHash } from "./model/hash.js";
+import { rdraHash } from "./model/hash.js";
 import { ModelParseError, parseModel, readModelFiles } from "./model/io.js";
-import type { Model } from "./model/kinds.js";
+import { kindDef, type Model } from "./model/kinds.js";
 import { approvalState, readReview } from "./review.js";
 
 export const APPROVAL_MESSAGES = {
@@ -28,7 +28,9 @@ async function changedSinceApproval(repo: string, reviewFile: string, current: M
   const commit = await lastCommitTouching(repo, relative(repo, reviewFile));
   if (!commit) return undefined;
   try {
-    return diffModels(parseModel(await readModelFilesAt(repo, commit)), current).map((c) => `${c.type} ${c.id}`);
+    return diffModels(parseModel(await readModelFilesAt(repo, commit)), current)
+      .filter((c) => kindDef(c.kind).layer === "rdra")
+      .map((c) => `${c.type} ${c.id}`);
   } catch {
     return undefined;
   }
@@ -51,7 +53,7 @@ export async function checkFeatureApproval(repo: string): Promise<ApprovalResult
   } catch (e) {
     return { state: "error", message: `承認記録を読めません: ${(e as Error).message}`, featureId: feature.id };
   }
-  const state = approvalState(review, modelHash(model));
+  const state = approvalState(review, rdraHash(model));
   const result: ApprovalResult = { state: state.state, message: APPROVAL_MESSAGES[state.state], model, featureId: feature.id };
   if (state.state === "stale") {
     const changed = await changedSinceApproval(repo, feature.reviewFile, model);

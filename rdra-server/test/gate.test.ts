@@ -1,11 +1,11 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runCli, type CliIo } from "../src/cli.js";
 import { isInvalidFeature, resolveFeature } from "../src/feature.js";
 import { gatePath, gateSkill } from "../src/gate.js";
-import { modelHash } from "../src/model/hash.js";
-import { RDRA_DIR, parseModel, readModelFiles } from "../src/model/io.js";
+import { rdraHash } from "../src/model/hash.js";
+import { DESIGN_DIR, RDRA_DIR, parseModel, readModelFiles } from "../src/model/io.js";
 import { decide, emptyReview, requestReview, writeReview } from "../src/review.js";
 import { runTrace } from "../src/trace-run.js";
 import { makeInvalidFeatureRepo, makeRepo, run } from "./helpers.js";
@@ -21,13 +21,21 @@ async function reviewFile(repo: string) {
 
 async function approve(repo: string) {
   const file = await reviewFile(repo);
-  const hash = modelHash(parseModel(await readModelFiles(repo)));
+  const hash = rdraHash(parseModel(await readModelFiles(repo)));
   await writeReview(file, decide(requestReview(emptyReview(), { now: T }), { decision: "approved", comments: [], hash, now: T }));
 }
 
 const reason = (d: { decision: string; reason?: string }) => (d.decision === "deny" ? d.reason : "");
 
 describe("gateSkill", () => {
+  it("keeps the RDRA approval when only the design changes", async () => {
+    const { repo } = await tracedFeatureRepo();
+    await approve(repo);
+    await mkdir(join(repo, DESIGN_DIR), { recursive: true });
+    await writeFile(join(repo, DESIGN_DIR, "components.yaml"), "- id: comp.db\n  name: DB\n  type: datastore\n");
+    expect(await gateSkill(repo, "superpowers:writing-plans")).toEqual({ decision: "allow" });
+  });
+
   it("allows skills it does not gate and anything outside a feature", async () => {
     const { repo } = await tracedFeatureRepo();
     expect(await gateSkill(repo, "superpowers:brainstorming")).toEqual({ decision: "allow" });
@@ -69,7 +77,7 @@ describe("gateSkill", () => {
     const pending = requestReview(emptyReview(), { now: T });
     await writeReview(await reviewFile(repo), pending);
     expect(reason(await gateSkill(repo, "superpowers:writing-plans"))).toContain("承認待ち");
-    const hash = modelHash(parseModel(await readModelFiles(repo)));
+    const hash = rdraHash(parseModel(await readModelFiles(repo)));
     await writeReview(await reviewFile(repo), decide(pending, { decision: "rejected", comments: [{ target: "uc.place-order", text: "直して" }], hash, now: T }));
     expect(reason(await gateSkill(repo, "superpowers:writing-plans"))).toContain("差し戻されています");
     expect(reason(await gateSkill(repo, "superpowers:executing-plans"))).toContain("差し戻されています");

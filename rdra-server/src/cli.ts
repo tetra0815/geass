@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { APPROVAL_MESSAGES, checkFeatureApproval } from "./approval.js";
 import { isInvalidFeature, resolveFeature } from "./feature.js";
 import { gatePath, gateSkill } from "./gate.js";
-import { modelHash } from "./model/hash.js";
+import { modelHash, rdraHash } from "./model/hash.js";
 import { ModelParseError, parseModel, readModelFiles } from "./model/io.js";
 import { readReview, type ReviewRecord } from "./review.js";
 import { formatTrace, runTrace } from "./trace-run.js";
@@ -25,7 +25,7 @@ const USAGE = [
   "  cli.js wait-review --repo <root> [--interval-ms 1000] [--timeout-sec 0]",
   "  cli.js trace --repo <root>",
   "  cli.js gate --repo <root> (--skill <name> | --path <file>)",
-  "  cli.js hash --repo <root>",
+  "  cli.js hash --repo <root> [--stage rdra|design]",
   "  cli.js serve --repo <root> [--port 0]",
   "",
 ].join("\n");
@@ -88,6 +88,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         port: { type: "string" },
         skill: { type: "string" },
         path: { type: "string" },
+        stage: { type: "string" },
       },
       strict: true,
     }) as { values: Record<string, string | undefined> });
@@ -123,8 +124,14 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     return serve(repo, Number(values.port ?? "0"), io);
   }
   if (command === "hash" && repo) {
+    const stage = values.stage ?? "rdra";
+    if (stage !== "rdra" && stage !== "design") {
+      io.err(`--stage は rdra か design です\n${USAGE}`);
+      return 64;
+    }
     try {
-      io.out(modelHash(parseModel(await readModelFiles(repo))) + "\n");
+      const model = parseModel(await readModelFiles(repo));
+      io.out((stage === "design" ? modelHash(model) : rdraHash(model)) + "\n");
       return 0;
     } catch (e) {
       if (!(e instanceof ModelParseError)) throw e;
