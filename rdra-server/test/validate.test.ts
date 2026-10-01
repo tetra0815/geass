@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { diffModels } from "../src/diff.js";
 import { parseModel } from "../src/model/io.js";
 import { formatTransitionRef, parseTransitionRef, relationsOf } from "../src/model/relations.js";
-import { hasErrors, validate, validateChanges } from "../src/validate.js";
-import { emptyModel } from "../src/model/kinds.js";
+import { hasErrors, validate, validateChanges, validateDesignChanges } from "../src/validate.js";
+import { emptyModel, type Model } from "../src/model/kinds.js";
 import { sampleFiles, sampleFullModel, sampleModel } from "./fixtures.js";
 
 const codes = (files: Record<string, string>) => validate(parseModel(files)).map((i) => `${i.level}:${i.code}:${i.elementId ?? ""}`);
@@ -183,5 +183,92 @@ describe("validateChanges", () => {
     expect(validateChanges(diffModels(sampleModel(), head))).toEqual([]);
     expect(validateChanges(diffModels(sampleModel(), sampleModel()))).toEqual([]);
     expect(validateChanges(diffModels(emptyModel(), emptyModel()))).toEqual([]);
+  });
+});
+
+const tags = (issues: { level: string; code: string; elementId?: string }[]) => issues.map((i) => `${i.level}:${i.code}:${i.elementId ?? ""}`).sort();
+
+describe("validate (design)", () => {
+  it("finds no issues in the sample design", () => {
+    expect(validate(sampleFullModel())).toEqual([]);
+  });
+
+  it("requires a table's store to be a datastore and its refs to be of the right kind", () => {
+    const m = sampleFullModel();
+    m.tables[0].store = "comp.web";
+    m.tables[0].related = [{ ref: "inf.order" }];
+    expect(tags(validate(m))).toEqual(["error:table-store-not-datastore:tbl.orders", "error:wrong-kind-ref:tbl.orders"]);
+  });
+
+  it("requires a table's state models to describe information the table realizes", () => {
+    const m = sampleFullModel();
+    m.information.push({ id: "inf.stock", name: "在庫", attributes: [], related: [] });
+    m.tables[0].realizes = ["inf.stock"];
+    expect(tags(validate(m)).filter((t) => t.startsWith("error"))).toEqual(["error:table-state-mismatch:tbl.orders"]);
+  });
+
+  it("requires a superseded decision to name a successor that is still in force", () => {
+    const m = sampleFullModel();
+    m.decisions[0].status = "superseded";
+    expect(tags(validate(m))).toEqual(["error:decision-without-successor:adr.postgres"]);
+    m.decisions.push({ id: "adr.aurora", name: "Aurora", status: "superseded", context: "c", decision: "d", alternatives: [], affects: [], basis: [], supersededBy: "adr.postgres" });
+    m.decisions[0].supersededBy = "adr.aurora";
+    expect(tags(validate(m))).toEqual([
+      "error:decision-successor-superseded:adr.aurora",
+      "error:decision-successor-superseded:adr.postgres",
+    ]);
+  });
+
+  it("warns about isolated components and, when it can look, missing docs", () => {
+    const m = sampleFullModel();
+    m.components.push({ id: "comp.batch", name: "バッチ", type: "worker", dependsOn: [], realizes: [], holds: [] });
+    m.tables[0].doc = "docs/design/er.md";
+    expect(tags(validate(m, { fileExists: (p) => p !== "docs/design/er.md" }))).toEqual([
+      "warning:isolated-component:comp.batch",
+      "warning:missing-doc:tbl.orders",
+    ]);
+    expect(tags(validate(m))).toEqual(["warning:isolated-component:comp.batch"]);
+  });
+});
+
+describe("validateDesignChanges", () => {
+  function touchOrderAndGateway(m: Model): Model {
+    m.information[0].attributes.push("合計金額");
+    m.externalSystems[0].name = "決済代行サービス";
+    m.states[0].name = "注文の状態";
+    return m;
+  }
+
+  it("requires added or changed information and external systems to be realized", () => {
+    const head = touchOrderAndGateway(sampleModel());
+    expect(tags(validateDesignChanges(head, diffModels(sampleModel(), head)))).toEqual([
+      "error:external-system-not-realized:ext.payment-gateway",
+      "error:information-not-realized:inf.order",
+    ]);
+  });
+
+  it("is satisfied by the sample design, and asks for the state on the realizing table", () => {
+    const head = touchOrderAndGateway(sampleFullModel());
+    expect(validateDesignChanges(head, diffModels(sampleFullModel(), head))).toEqual([]);
+    head.tables[0].states = [];
+    expect(tags(validateDesignChanges(head, diffModels(sampleFullModel(), head)))).toEqual(["error:state-not-stored:st.order"]);
+  });
+
+  it("accepts information held by a component and then does not ask for a table state", () => {
+    const head = touchOrderAndGateway(sampleFullModel());
+    head.tables = [];
+    head.components.find((c) => c.id === "comp.payment-adapter")!.holds = ["inf.order"];
+    expect(validateDesignChanges(head, diffModels(sampleFullModel(), head))).toEqual([]);
+  });
+
+  it("ignores removed elements and warns about unrealized technology principles", () => {
+    const head = sampleFullModel();
+    head.externalSystems = [];
+    head.principles.push({ id: "pr.postgres", name: "PostgreSQL を使う", category: "technology", level: "must", scope: [] });
+    expect(tags(validateDesignChanges(head, diffModels(sampleFullModel(), head)))).toEqual([
+      "warning:technology-principle-not-realized:pr.postgres",
+    ]);
+    head.decisions[0].basis = ["pr.postgres"];
+    expect(validateDesignChanges(head, diffModels(sampleFullModel(), head))).toEqual([]);
   });
 });

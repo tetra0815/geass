@@ -1,5 +1,5 @@
 import type { ElementChange } from "./diff.js";
-import { KINDS, type Model, type Usecase } from "./model/kinds.js";
+import { KINDS, type KindKey, type Model, type Usecase } from "./model/kinds.js";
 import {
   RELATION_TARGET_PREFIXES,
   formatTransitionRef,
@@ -14,11 +14,16 @@ export interface Issue {
   elementId?: string;
 }
 
+export interface ValidateOptions {
+  /** Whether a repository-relative path exists; without it, design `doc` paths are not checked. */
+  fileExists?: (repoRelativePath: string) => boolean;
+}
+
 export function hasErrors(issues: Issue[]): boolean {
   return issues.some((i) => i.level === "error");
 }
 
-export function validate(model: Model): Issue[] {
+export function validate(model: Model, opts: ValidateOptions = {}): Issue[] {
   const issues: Issue[] = [];
   const error = (code: string, message: string, elementId?: string) => issues.push({ level: "error", code, message, elementId });
   const warn = (code: string, message: string, elementId?: string) => issues.push({ level: "warning", code, message, elementId });
@@ -101,6 +106,38 @@ export function validate(model: Model): Issue[] {
     }
   }
 
+  const related = new Set(relationsOf(model).flatMap((r) => [r.from, r.to]));
+  const checkDoc = (id: string, doc: string | undefined) => {
+    if (doc && opts.fileExists && !opts.fileExists(doc)) warn("missing-doc", `${id} の doc ${doc} が見つかりません`, id);
+  };
+  const components = new Map(model.components.map((c) => [c.id, c]));
+  for (const c of model.components) {
+    if (!related.has(c.id)) warn("isolated-component", `${c.id} はどの要素とも関係していません`, c.id);
+    checkDoc(c.id, c.doc);
+  }
+  for (const t of model.tables) {
+    const store = components.get(t.store);
+    if (store && store.type !== "datastore") {
+      error("table-store-not-datastore", `${t.id} の置き場所 ${t.store} は datastore ではありません（type: ${store.type}）`, t.id);
+    }
+    for (const id of t.states) {
+      const sm = stateModels.get(id);
+      if (sm && (!sm.information || !t.realizes.includes(sm.information))) {
+        error("table-state-mismatch", `${t.id} の状態 ${id} は、${t.id} が実現する情報の状態モデルではありません`, t.id);
+      }
+    }
+    checkDoc(t.id, t.doc);
+  }
+  const decisions = new Map(model.decisions.map((d) => [d.id, d]));
+  for (const d of model.decisions) {
+    if (d.status === "superseded" && !d.supersededBy) {
+      error("decision-without-successor", `${d.id} は superseded ですが、後継（supersededBy）がありません`, d.id);
+    }
+    if (d.supersededBy && decisions.get(d.supersededBy)?.status === "superseded") {
+      error("decision-successor-superseded", `${d.id} の後継 ${d.supersededBy} も superseded です。有効な判断を指してください`, d.id);
+    }
+  }
+
   return issues;
 }
 
@@ -113,4 +150,46 @@ export function validateChanges(changes: ElementChange[]): Issue[] {
       message: `${c.id} に受け入れ条件がありません（この feature で追加・変更したユースケースには 1 件以上必要です）`,
       elementId: c.id,
     }));
+}
+
+const liveIds = (changes: ElementChange[], kind: KindKey) =>
+  changes.filter((c) => c.kind === kind && c.type !== "removed").map((c) => c.id);
+
+/** Whether the design realizes what this feature added to or changed in the RDRA model. */
+export function validateDesignChanges(model: Model, changes: ElementChange[]): Issue[] {
+  const issues: Issue[] = [];
+  const error = (code: string, message: string, elementId: string) => issues.push({ level: "error", code, message, elementId });
+  const inTables = new Set(model.tables.flatMap((t) => t.realizes));
+  const held = new Set(model.components.flatMap((c) => c.holds));
+  const realizedByComponents = new Set(model.components.flatMap((c) => c.realizes));
+
+  for (const id of liveIds(changes, "externalSystems")) {
+    if (!realizedByComponents.has(id)) error("external-system-not-realized", `${id} と連携するコンポーネント（realizes）がありません`, id);
+  }
+  for (const id of liveIds(changes, "information")) {
+    if (!inTables.has(id) && !held.has(id)) {
+      error("information-not-realized", `${id} を保存するテーブルも、保持するコンポーネント（holds）もありません`, id);
+    }
+  }
+  for (const id of liveIds(changes, "states")) {
+    const info = model.states.find((s) => s.id === id)?.information;
+    if (!info) continue;
+    const tables = model.tables.filter((t) => t.realizes.includes(info));
+    if (tables.length > 0 && !tables.some((t) => t.states.includes(id))) {
+      error("state-not-stored", `${id} を状態として持つテーブルがありません（${tables.map((t) => t.id).join(", ")} の states に加えてください）`, id);
+    }
+  }
+  const grounded = new Set([...realizedByComponents, ...model.decisions.flatMap((d) => d.basis)]);
+  for (const id of liveIds(changes, "principles")) {
+    const p = model.principles.find((x) => x.id === id);
+    if (p && p.category === "technology" && p.level === "must" && !grounded.has(id)) {
+      issues.push({
+        level: "warning",
+        code: "technology-principle-not-realized",
+        message: `${id} を実現するコンポーネント（realizes）も、根拠にする設計判断（basis）もありません`,
+        elementId: id,
+      });
+    }
+  }
+  return issues;
 }
